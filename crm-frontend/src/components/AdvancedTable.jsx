@@ -2,15 +2,15 @@ import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { 
   Search, Settings, Filter, Plus, Save, X, 
   GripVertical, Check, ChevronDown, Trash2, Edit2, 
-  ChevronLeft, ChevronRight, ArrowDownAZ, ArrowUpAZ, XCircle
+  ChevronLeft, ChevronRight, ArrowDown, ArrowUp, XCircle // <-- CHANGED HERE
 } from 'lucide-react'
 import '../App.css'
 
 const AdvancedTable = ({ 
     tableName, title, columns, data, onAdd, onEdit, onDelete, 
-    customRenderer, headerActions, onRowClick // <-- New Prop
+    customRenderer, headerActions, onRowClick // <-- Prop used here
 }) => {
-  // ... [KEEP ALL EXISTING STATE & EFFECTS] ...
+  // ... [ALL STATE & EFFECTS REMAIN THE SAME] ...
   const [searchQuery, setSearchQuery] = useState('')
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
   const [currentPage, setCurrentPage] = useState(1)
@@ -123,58 +123,84 @@ const AdvancedTable = ({
       const setId = Number(e.target.value); const set = savedFilterSets.find(s => s.id === setId);
       if(set) { setActiveFilters(set.filters); setSelectedSavedFilter(setId); setCurrentPage(1); } else { setActiveFilters([]); setSelectedSavedFilter(''); }
   }
+  const deleteFilterSet = (setId, e) => {
+      e.stopPropagation(); if(!window.confirm("Delete?")) return;
+      const updated = savedFilterSets.filter(s => s.id !== setId); setSavedFilterSets(updated); localStorage.setItem(`${tableName}_filterSets`, JSON.stringify(updated));
+      if(selectedSavedFilter === setId) { setActiveFilters([]); setSelectedSavedFilter(''); }
+  }
   const getColDef = (key) => columns.find(c => c.key === key) || { label: key }
 
   return (
     <div className="adv-table-card">
-        {/* ... [KEEP TOOLBAR & FILTER PANEL SAME AS BEFORE] ... */}
+        {/* --- TOOLBAR --- */}
         <div className="adv-table-toolbar" style={{ flexWrap: 'wrap', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1 }}>
-                <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.1rem', whiteSpace: 'nowrap' }}>{title}</h3>
-                <div className="adv-search-box" style={{ flex: '1 1 300px', minWidth: '250px' }}>
-                    <Search size={18} />
-                    <input placeholder={`Search ${title}...`} value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }} />
-                    {searchQuery && <X size={14} style={{cursor:'pointer', position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8'}} onClick={() => setSearchQuery('')} />}
-                </div>
+            
+            {/* 1. SEARCH (First & Wide) */}
+            <div className="adv-search-box" style={{ flex: '1 1 300px', minWidth: '250px' }}>
+                <Search size={18} />
+                <input 
+                    placeholder={`Search ${title}...`} 
+                    value={searchQuery}
+                    onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                />
+                {searchQuery && <X size={14} style={{cursor:'pointer', position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8'}} onClick={() => setSearchQuery('')} />}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                 <div className="adv-select-wrapper">
-                    <select value={selectedSavedFilter} onChange={loadFilterSet} className="btn-secondary" style={{ borderColor: '#e2e8f0', color: '#64748b', height: '40px' }}>
-                        <option value="">📂 Saved Views</option>
-                        {savedFilterSets.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}
-                    </select>
-                </div>
-                <button className={`btn-secondary ${showFilters || activeFilters.length > 0 ? 'active' : ''}`} onClick={() => setShowFilters(!showFilters)} style={{ height: '40px' }}>
-                    <Filter size={16} /> Filter
-                    {activeFilters.length > 0 && <span className="badge">{activeFilters.length}</span>}
+
+            {/* 2. SAVED VIEWS */}
+            <div className="adv-select-wrapper">
+                <select 
+                    value={selectedSavedFilter} 
+                    onChange={loadFilterSet}
+                    className="btn-secondary"
+                    style={{ borderColor: '#e2e8f0', color: '#64748b', height: '40px' }}
+                >
+                    <option value="">📂 Saved Views</option>
+                    {savedFilterSets.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}
+                </select>
+            </div>
+
+            {/* 3. FILTERS */}
+            <button 
+                className={`btn-secondary ${showFilters || activeFilters.length > 0 ? 'active' : ''}`}
+                onClick={() => setShowFilters(!showFilters)}
+                style={{ height: '40px' }}
+            >
+                <Filter size={16} /> Filter
+                {activeFilters.length > 0 && <span className="badge">{activeFilters.length}</span>}
+            </button>
+
+            {/* 4. CUSTOM ACTIONS (View Toggles) */}
+            {headerActions}
+
+            {/* 5. COLUMNS (Toggle Visibility) */}
+            <div style={{ position: 'relative' }}>
+                <button className="btn-secondary" onClick={() => setShowColSelector(!showColSelector)} style={{ height: '40px' }}>
+                    <Settings size={16} /> Columns
                 </button>
-                {headerActions}
-                {!customRenderer && (
-                    <div style={{ position: 'relative' }}>
-                        <button className="btn-secondary" onClick={() => setShowColSelector(!showColSelector)} style={{ height: '40px' }}>
-                            <Settings size={16} /> Columns
-                        </button>
-                        {showColSelector && (
-                            <div className="adv-dropdown-menu">
-                                <div className="menu-header">Show/Hide Columns</div>
-                                {columns.map(col => (
-                                    <div key={col.key} className="menu-item" onClick={() => toggleColumn(col.key)}>
-                                        <div className={`checkbox ${visibleColumns.includes(col.key) ? 'checked' : ''}`}>{visibleColumns.includes(col.key) && <Check size={12} />}</div>
-                                        <span>{col.label}</span>
-                                    </div>
-                                ))}
+                {showColSelector && (
+                    <div className="adv-dropdown-menu">
+                        <div className="menu-header">Show/Hide Columns</div>
+                        {columns.map(col => (
+                            <div key={col.key} className="menu-item" onClick={() => toggleColumn(col.key)}>
+                                <div className={`checkbox ${visibleColumns.includes(col.key) ? 'checked' : ''}`}>
+                                    {visibleColumns.includes(col.key) && <Check size={12} />}
+                                </div>
+                                <span>{col.label}</span>
                             </div>
-                        )}
+                        ))}
                     </div>
                 )}
-                {onAdd && (
-                    <button onClick={onAdd} className="btn-primary" style={{ padding: '0 20px', height: '40px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <Plus size={18} /> Add New
-                    </button>
-                )}
             </div>
+
+            {/* 6. ADD NEW */}
+            {onAdd && (
+                <button onClick={onAdd} className="btn-primary" style={{ padding: '0 20px', height: '40px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <Plus size={18} /> Add New
+                </button>
+            )}
         </div>
 
+        {/* --- FILTER PANEL --- */}
         {showFilters && (
             <div className="adv-filter-panel">
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '15px' }}>
@@ -187,10 +213,13 @@ const AdvancedTable = ({
                         <option value="contains">Contains</option>
                         <option value="equals">Equals</option>
                         <option value="starts">Starts With</option>
+                        <option value="ends">Ends With</option>
+                        <option value="not">Not Equal</option>
                     </select>
                     <input className="form-input" style={{ width: '140px' }} placeholder="Value..." value={newFilter.value} onChange={e => setNewFilter({...newFilter, value: e.target.value})} />
                     <button onClick={addFilter} className="btn-secondary">Add</button>
                 </div>
+
                 {activeFilters.length > 0 && (
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                         {activeFilters.map((f, i) => (
@@ -233,7 +262,7 @@ const AdvancedTable = ({
                                             <div className="th-content">
                                                 <GripVertical size={14} className="drag-handle" />
                                                 <span>{colDef.label}</span>
-                                                {sortConfig.key === colKey && (sortConfig.direction === 'asc' ? <ArrowDownAZ size={14} /> : <ArrowUpAZ size={14} />)}
+                                                {sortConfig.key === colKey && (sortConfig.direction === 'asc' ? <ArrowDown size={14} /> : <ArrowUp size={14} />)} {/* <-- UPDATED ICONS */}
                                             </div>
                                             <div className="resize-handle" onMouseDown={(e) => startResize(e, colKey)} onClick={(e) => e.stopPropagation()} />
                                         </th>
@@ -247,7 +276,7 @@ const AdvancedTable = ({
                                 paginatedData.map((row, i) => (
                                     <tr 
                                         key={i} 
-                                        onClick={() => onRowClick && onRowClick(row)} // <-- CLICK ROW TO VIEW DETAILS
+                                        onClick={() => onRowClick && onRowClick(row)} // <-- CLICK EVENT
                                         style={{ cursor: onRowClick ? 'pointer' : 'default' }}
                                     >
                                         {columnOrder.map(colKey => {
@@ -268,7 +297,7 @@ const AdvancedTable = ({
                         </tbody>
                     </table>
                 </div>
-                {/* Pagination (Same as before) */}
+                {/* Pagination */}
                 <div className="adv-pagination">
                     <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Showing <b>{(currentPage - 1) * itemsPerPage + 1}</b> to <b>{Math.min(currentPage * itemsPerPage, processedData.length)}</b> of <b>{processedData.length}</b> entries</div>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
