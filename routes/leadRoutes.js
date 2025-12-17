@@ -94,38 +94,64 @@ router.post('/', authenticateToken, checkPerm('lead:create'), async (req, res) =
   } finally { client.release(); }
 });
 
-// UPDATE LEAD (Full Edit)
+// UPDATE LEAD (Dynamic - Handles Status, Closure, and Full Edits)
 router.put('/:id', authenticateToken, checkPerm('lead:update'), async (req, res) => {
   const leadId = req.params.id;
+  const tenant_id = req.user.tenant_id;
+  
   const { 
-      name, lead_date, category, lead_message, remark, source, status, pipeline,
+      name, // Maps to title
+      lead_date, category, lead_message, remark, source, status, pipeline,
       req_amount, lead_type, priority, company_name, owner,
       city, state, company_email, company_phone,
-      phones, emails, address
+      phones, emails, address,
+      closed_reason, closed_time
   } = req.body;
-
-  const tenant_id = req.user.tenant_id;
-  const assignedOwner = owner === "" ? null : owner;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    await client.query(`
-        UPDATE leads SET 
-            title=$1, lead_date=$2, category=$3, lead_message=$4, remark=$5, source=$6, 
-            status=$7, pipeline=$8, req_amount=$9, lead_type=$10, priority=$11, 
-            company_name=$12, owner=$13, city=$14, state=$15, 
-            company_email=$16, company_phone=$17
-        WHERE id=$18 AND tenant_id=$19
-    `, [
-        name, lead_date, category, lead_message, remark, source, status, pipeline,
-        req_amount, lead_type, priority, company_name, assignedOwner, city, state,
-        company_email, company_phone, leadId, tenant_id
-    ]);
+    // 1. Build Dynamic SQL for Main Table
+    // We only update fields that are actually sent.
+    let updateFields = [];
+    let values = [];
+    let idx = 1;
 
-    // Update Related (Delete All -> Re-Insert strategy for simplicity)
-    // Only perform this if phones/emails/address are actually passed in the body
+    const addField = (col, val) => {
+        updateFields.push(`${col} = $${idx++}`);
+        values.push(val);
+    };
+
+    if (name !== undefined) addField('title', name);
+    if (lead_date !== undefined) addField('lead_date', lead_date);
+    if (category !== undefined) addField('category', category);
+    if (lead_message !== undefined) addField('lead_message', lead_message);
+    if (remark !== undefined) addField('remark', remark);
+    if (source !== undefined) addField('source', source);
+    if (status !== undefined) addField('status', status);
+    if (pipeline !== undefined) addField('pipeline', pipeline);
+    if (req_amount !== undefined) addField('req_amount', req_amount);
+    if (lead_type !== undefined) addField('lead_type', lead_type);
+    if (priority !== undefined) addField('priority', priority);
+    if (company_name !== undefined) addField('company_name', company_name);
+    if (owner !== undefined) addField('owner', owner === "" ? null : owner);
+    if (city !== undefined) addField('city', city);
+    if (state !== undefined) addField('state', state);
+    if (company_email !== undefined) addField('company_email', company_email);
+    if (company_phone !== undefined) addField('company_phone', company_phone);
+    if (closed_reason !== undefined) addField('closed_reason', closed_reason);
+    if (closed_time !== undefined) addField('closed_time', closed_time);
+    
+    updateFields.push(`updated_at = NOW()`);
+
+    if (updateFields.length > 0) {
+        const query = `UPDATE leads SET ${updateFields.join(', ')} WHERE id = $${idx} AND tenant_id = $${idx + 1}`;
+        values.push(leadId, tenant_id);
+        await client.query(query, values);
+    }
+
+    // 2. Update Related Tables (Only if arrays are provided)
     if (phones) {
         await client.query("DELETE FROM lead_phones WHERE lead_id = $1", [leadId]);
         for (const p of phones) await client.query(`INSERT INTO lead_phones (lead_id, phone_number, type) VALUES ($1, $2, $3)`, [leadId, p.number, p.type]);
