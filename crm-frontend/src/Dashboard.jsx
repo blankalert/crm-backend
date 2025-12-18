@@ -10,22 +10,24 @@ function Dashboard() {
   const [isSidebarOpen, setSidebarOpen] = useState(true)
   const [currentUser, setCurrentUser] = useState({ name: 'Loading...', role: '...', firstName: 'User' })
   const [companyName, setCompanyName] = useState('CRM System')
-  
-  // Dashboard Data State - We'll pass this down via Outlet context
   const [dashboardData, setDashboardData] = useState(null)
 
   const navigate = useNavigate() 
   const location = useLocation()
   const token = localStorage.getItem('token')
 
+  console.log("Dashboard: Rendering. Token present:", !!token);
+
   if (!token) return <Navigate to="/" />
 
   useEffect(() => {
     const loadData = async () => {
         try {
+            console.log("Dashboard: Fetching initial data...");
             const res = await axios.get('http://localhost:3000/api/dashboard', {
                 headers: { Authorization: `Bearer ${token}` }
             })
+            console.log("Dashboard: Data fetched successfully.");
             setDashboardData(res.data)
             setCompanyName(res.data.company_name)
             setCurrentUser({
@@ -34,21 +36,23 @@ function Dashboard() {
                 firstName: res.data.user.first_name
             })
         } catch (err) {
+            console.error("Dashboard: Fetch failed", err);
             if (err.response && err.response.status === 401) {
+                console.warn("Dashboard: 401 received during init load.");
                 localStorage.clear();
                 navigate('/');
             }
         }
     }
     loadData()
-  }, [token])
+  }, [token, navigate])
 
   const handleLogout = () => {
     localStorage.clear()
     navigate('/')
   }
 
-  // Define Menu Items with Paths
+  // --- NESTED MENU STRUCTURE ---
   const menuItems = [
     { name: 'Overview', icon: <LayoutDashboard size={20} />, path: '/dashboard/overview' },
     { name: 'Leads', icon: <Zap size={20} />, path: '/dashboard/leads' },
@@ -60,36 +64,52 @@ function Dashboard() {
       name: 'Settings', 
       icon: <SettingsIcon size={20} />,
       subItems: [
-        { name: 'Role Control', path: '/dashboard/settings/roles' },
-        { name: 'User Control', path: '/dashboard/settings/users' },
-        { name: 'Company Profile', path: '/dashboard/settings/company' }
+        { 
+          name: 'Customization',
+          subItems: [
+            { name: 'Role Control', path: '/dashboard/settings/customization/roles' },
+            { name: 'Pipeline Control', path: '/dashboard/settings/customization/pipeline' },
+            // Add other customization items here if needed
+          ]
+        },
+        { 
+          name: 'Organization',
+          subItems: [
+            { name: 'Company Profile', path: '/dashboard/settings/customization/company' },
+            { name: 'User Control', path: '/dashboard/settings/users' },
+          ]
+        }
       ]
     },
   ]
 
-  // Determine active tab based on current URL path
+  // Flatten logic to find path for active tab highlight
   const getActiveTab = () => {
       const path = location.pathname;
       if (path.includes('/leads')) return 'Leads';
       if (path.includes('/overview')) return 'Overview';
-      if (path.includes('/settings/roles')) return 'Role Control';
+      if (path.includes('/settings/customization/roles')) return 'Role Control';
       if (path.includes('/settings/users')) return 'User Control';
-      if (path.includes('/settings/company')) return 'Company Profile';
-      return '';
+      if (path.includes('/settings/customization/company')) return 'Company Profile';
+      return 'Overview'; // Default
   }
 
-  // Handle Navigation
-  const handleNavigation = (name) => {
-      let item = menuItems.find(i => i.name === name);
-      if(!item) {
-          menuItems.forEach(i => {
-              if(i.subItems) {
-                  const sub = i.subItems.find(s => s.name === name);
-                  if(sub) item = sub;
-              }
-          })
+  // Recursively find the path for a given name
+  const findPath = (items, name) => {
+    for (const item of items) {
+      if (item.name === name) return item.path;
+      if (item.subItems) {
+        const path = findPath(item.subItems, name);
+        if (path) return path;
       }
-      if(item && item.path) navigate(item.path);
+    }
+    return null;
+  }
+
+  const handleNavigation = (name) => {
+      const path = findPath(menuItems, name);
+      console.log(`Sidebar Navigating to: ${name} -> ${path}`);
+      if (path) navigate(path);
   }
 
   return (
@@ -107,7 +127,7 @@ function Dashboard() {
 
         <div className="main-content">
             <div className="content-body" style={{ padding: '0' }}>
-               {/* Context provider allows child routes to access shared data */}
+               {/* Pass context to children */}
                <Outlet context={{ token, dashboardData, companyName, currentUser }} /> 
             </div>
         </div>

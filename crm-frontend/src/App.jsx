@@ -8,8 +8,13 @@ import Register from './Register'
 import Dashboard from './Dashboard'
 import Overview from './components/Overview'
 import UserControl from './components/UserControl'
-import Settings from './components/Settings'
+// Settings container removed as requested
+import RoleSettings from './components/settings/customization/RoleSettings'
+import CompanyProfile from './components/settings/customization/CompanyProfile'
+import PipelineSettings from './components/settings/customization/PipelineSettings'
+
 import Leads from './components/leads/Leads'
+
 
 // --- GLOBAL AUTH INTERCEPTOR ---
 const AuthHandler = () => {
@@ -19,6 +24,8 @@ const AuthHandler = () => {
       (response) => response,
       (error) => {
         if (error.response && error.response.status === 401) {
+          console.warn("AuthHandler: 401 Unauthorized detected. Redirecting to Login...");
+          console.warn("AuthHandler Error Details:", error.response.data);
           localStorage.clear();
           navigate('/');
         }
@@ -30,6 +37,25 @@ const AuthHandler = () => {
   return null;
 }
 
+// --- HELPER TO GET TOKEN ---
+// Tries to get token from context, falls back to localStorage
+const useToken = () => {
+    const context = useOutletContext();
+    const tokenFromStorage = localStorage.getItem('token');
+    
+    // Debugging Token Retrieval
+    if (context && context.token) {
+        // console.log("useToken: Found token in Outlet Context");
+        return context.token;
+    }
+    if (tokenFromStorage) {
+        // console.log("useToken: Found token in LocalStorage");
+        return tokenFromStorage;
+    }
+    console.warn("useToken: No token found in Context OR LocalStorage!");
+    return null;
+}
+
 // --- WRAPPERS ---
 const OverviewWrapperWithContext = () => {
     const context = useOutletContext();
@@ -38,13 +64,39 @@ const OverviewWrapperWithContext = () => {
 }
 
 const UserControlWrapperWithContext = () => {
-    const { token } = useOutletContext();
+    const token = useToken();
+    if (!token) {
+        console.log("UserControlWrapper: No token, redirecting...");
+        return <Navigate to="/" />;
+    }
     return <UserControl token={token} />;
 }
 
-const SettingsWrapperWithContext = () => {
+// New Wrapper for RoleSettings
+const RoleSettingsWrapper = () => {
+    console.log("RoleSettingsWrapper: Rendering...");
+    const token = useToken();
+    if (!token) {
+        console.log("RoleSettingsWrapper: No token, redirecting...");
+        return <Navigate to="/" />;
+    }
+    return <RoleSettings token={token} />;
+}
+
+// New Wrapper for CompanyProfile
+const CompanyProfileWrapper = () => {
+    console.log("CompanyProfileWrapper: Rendering...");
+    const token = useToken();
+    if (!token) {
+        console.log("CompanyProfileWrapper: No token, redirecting...");
+        return <Navigate to="/" />;
+    }
+    return <CompanyProfile token={token} />;
+}
+
+const PipelineWrapper = () => {
     const { token } = useOutletContext();
-    return <Settings token={token} />;
+    return <PipelineSettings token={token} />;
 }
 
 function App() {
@@ -65,12 +117,18 @@ function App() {
             <Route path="leads" element={<Leads />} />
             <Route path="leads/details/:id" element={<Leads />} />
             
-            {/* Settings Routes */}
+            {/* DIRECT SETTINGS ROUTES (No intermediate Settings page) */}
             <Route path="settings/users" element={<UserControlWrapperWithContext />} />
-            <Route path="settings/roles" element={<SettingsWrapperWithContext />} />
-            <Route path="settings/company" element={<SettingsWrapperWithContext />} />
             
-            {/* Fallbacks for other menu items if components not ready */}
+            <Route path="settings/customization/roles" element={<RoleSettingsWrapper />} />
+            <Route path="settings/customization/company" element={<CompanyProfileWrapper />} />
+            <Route path="settings/customization/pipeline" element={<PipelineWrapper />} />
+            
+            {/* Legacy redirects to ensure old links work */}
+            <Route path="settings/roles" element={<Navigate to="customization/roles" replace />} />
+            <Route path="settings/company" element={<Navigate to="customization/company" replace />} />
+
+            {/* Fallbacks */}
             <Route path="tasks" element={<div>Tasks Module</div>} />
             <Route path="orders" element={<div>Orders Module</div>} />
             <Route path="contacts" element={<div>Contacts Module</div>} />
