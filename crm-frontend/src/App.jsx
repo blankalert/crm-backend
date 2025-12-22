@@ -47,7 +47,8 @@ const useToken = () => {
     if (context && context.token) {
         // console.log("useToken: Found token in Outlet Context");
         return context.token;
-    }
+    }   
+         console.log("useToken: token not found in Outlet Context move for local storage");
     if (tokenFromStorage) {
         // console.log("useToken: Found token in LocalStorage");
         return tokenFromStorage;

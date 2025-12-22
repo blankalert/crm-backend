@@ -6,14 +6,24 @@ const router = express.Router();
 // GET ALL PIPELINES FOR TENANT
 router.get('/', authenticateToken, async (req, res) => {
     try {
-        const result = await pool.query(`
+        const { module } = req.query;
+        let query = `
             SELECT p.*, 
-            (SELECT json_agg(s.* ORDER BY s.stage_order) FROM pipeline_stages s WHERE s.pipeline_id = p.id) as stages,
-            (SELECT json_agg(e.* ORDER BY e.reason_order) FROM exit_reasons e WHERE e.pipeline_id = p.id) as exit_reasons
+            COALESCE((SELECT json_agg(s.* ORDER BY s.stage_order) FROM pipeline_stages s WHERE s.pipeline_id = p.id), '[]'::json) as stages,
+            COALESCE((SELECT json_agg(e.* ORDER BY e.reason_order) FROM exit_reasons e WHERE e.pipeline_id = p.id), '[]'::json) as exit_reasons
             FROM pipelines p
             WHERE p.tenant_id = $1
-            ORDER BY p.created_at DESC
-        `, [req.user.tenant_id]);
+        `;
+        const params = [req.user.tenant_id];
+
+        if (module) {
+            query += ` AND p.module = $2`;
+            params.push(module);
+        }
+
+        query += ` ORDER BY p.created_at DESC`;
+
+        const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (err) {
         res.status(500).send("Error fetching pipelines");
