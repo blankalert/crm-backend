@@ -10,6 +10,9 @@ router.get('/', authenticateToken, async (req, res) => {
         let query = `
             SELECT p.*, 
             COALESCE((SELECT json_agg(s.* ORDER BY s.stage_order) FROM pipeline_stages s WHERE s.pipeline_id = p.id), '[]'::json) as stages,
+            COALESCE(p.won_stage_name, 'Won') as won_stage_name,
+            COALESCE(p.lost_stage_name, 'Lost') as lost_stage_name,
+            COALESCE(p.unqualified_stage_name, 'Unqualified') as unqualified_stage_name,
             COALESCE((SELECT json_agg(e.* ORDER BY e.reason_order) FROM exit_reasons e WHERE e.pipeline_id = p.id), '[]'::json) as exit_reasons
             FROM pipelines p
             WHERE p.tenant_id = $1
@@ -32,7 +35,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
 // CREATE / UPDATE PIPELINE (Full Transaction)
 router.post('/', authenticateToken, checkPerm('settings:update'), async (req, res) => {
-    const { id, pipeline_name, module, is_active, stages, exit_reasons } = req.body;
+    const { id, pipeline_name, module, is_active, stages, exit_reasons, won_stage_name, lost_stage_name, unqualified_stage_name } = req.body;
     const tenant_id = req.user.tenant_id;
     const user_id = req.user.user_id;
 
@@ -45,9 +48,10 @@ router.post('/', authenticateToken, checkPerm('settings:update'), async (req, re
         if (id) {
             // Update Existing
             await client.query(`
-                UPDATE pipelines SET pipeline_name=$1, module=$2, is_active=$3, updated_at=NOW() 
+                UPDATE pipelines SET pipeline_name=$1, module=$2, is_active=$3, updated_at=NOW(),
+                won_stage_name=$6, lost_stage_name=$7, unqualified_stage_name=$8
                 WHERE id=$4 AND tenant_id=$5
-            `, [pipeline_name, module, is_active, id, tenant_id]);
+            `, [pipeline_name, module, is_active, id, tenant_id, won_stage_name || 'Won', lost_stage_name || 'Lost', unqualified_stage_name || 'Unqualified']);
             
             // Delete old stages/reasons to re-insert (simplest sync strategy)
             await client.query("DELETE FROM pipeline_stages WHERE pipeline_id=$1", [id]);
@@ -55,9 +59,9 @@ router.post('/', authenticateToken, checkPerm('settings:update'), async (req, re
         } else {
             // Create New
             const res = await client.query(`
-                INSERT INTO pipelines (tenant_id, pipeline_name, module, is_active, created_by)
-                VALUES ($1, $2, $3, $4, $5) RETURNING id
-            `, [tenant_id, pipeline_name, module, is_active || true, user_id]);
+                INSERT INTO pipelines (tenant_id, pipeline_name, module, is_active, created_by, won_stage_name, lost_stage_name, unqualified_stage_name)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+            `, [tenant_id, pipeline_name, module, is_active || true, user_id, won_stage_name || 'Won', lost_stage_name || 'Lost', unqualified_stage_name || 'Unqualified']);
             pipelineId = res.rows[0].id;
         }
 

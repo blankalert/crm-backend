@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { ArrowLeft, Edit, Phone, Mail, FileText, MessageSquare, ClipboardList, CheckCircle, ChevronDown, ThumbsUp, XCircle, ThumbsDown, Clock, User, X } from 'lucide-react'
+import TaskSection from './TaskSection'
+
 
 const LeadDetails = ({
-    lead, onBack, onEdit, activeTab, setActiveTab,
+    lead, onBack, onEdit, activeTab, setActiveTab, pipelines, users, token,
     pipelineStages, 
     
     // Updated Props
@@ -22,6 +24,25 @@ const LeadDetails = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const handleCloseOptionClick = (status) => { setIsDropdownOpen(false); onCloseLead(status); };
 
+  const currentPipeline = pipelines.find(p => p.pipeline_name === lead.pipeline);
+
+  const getCloseStatusName = (statusType) => {
+      if (!currentPipeline) return statusType;
+      switch(statusType) {
+          case 'Won': return currentPipeline.won_stage_name || 'Won';
+          case 'Lost': return currentPipeline.lost_stage_name || 'Lost';
+          case 'Unqualified': return currentPipeline.unqualified_stage_name || 'Unqualified';
+          default: return statusType;
+      }
+  }
+  const finalCloseStatusName = isClosed ? getCloseStatusName(lead.status) : 'Close Lead';
+
+  const availableStatuses = ['Won', 'Unqualified', 'Lost'];
+
+  const availableReasons = currentPipeline && closeStatus
+      ? currentPipeline.exit_reasons.filter(r => r.reason_type === closeStatus) 
+      : [];
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
         {/* --- HEADER --- */}
@@ -29,7 +50,10 @@ const LeadDetails = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <button onClick={onBack} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', display: 'flex', gap: '6px', color: '#64748b', fontSize: '0.85rem', fontWeight: '500', alignItems: 'center' }}><ArrowLeft size={16} /> Back</button>
                 <div>
-                    <h2 style={{ margin: 0, color: '#1e293b', fontSize: '1.4rem' }}>{lead.title}</h2>
+                    <h2 style={{ margin: 0, color: '#1e293b', fontSize: '1.4rem' }}>
+                        <span style={{ color: '#94a3b8', marginRight: '10px', fontSize: '1.2rem' }}>#{lead.leadRID || lead.leadrid}</span>
+                        {lead.title}
+                    </h2>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '0.85rem', color: '#64748b' }}>
                         <span>{lead.company_name}</span><span>•</span><span>{lead.city || 'No Location'}</span>
                     </div>
@@ -97,15 +121,21 @@ const LeadDetails = ({
                 <button 
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                     className="btn-primary" 
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', background: isClosed ? '#475569' : '#2563eb', padding: '8px 16px', fontSize: '0.9rem' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', background: isClosed ? getStatusColor(lead.status).b : '#2563eb', padding: '8px 16px', fontSize: '0.9rem' }}
                 >
-                    {isClosed ? lead.status : 'Close Lead'} <ChevronDown size={16} />
+                    {finalCloseStatusName} <ChevronDown size={16} />
                 </button>
                 {isDropdownOpen && (
                     <div style={{ position: 'absolute', top: '110%', right: 0, width: '180px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 50, overflow: 'hidden' }}>
-                        <div onClick={() => handleCloseOptionClick('Won')} style={{ padding: '10px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontSize: '0.9rem' }} className="dropdown-item"><ThumbsUp size={14} /> Won</div>
-                        <div onClick={() => handleCloseOptionClick('Unqualified')} style={{ padding: '10px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#991b1b', fontSize: '0.9rem' }} className="dropdown-item"><XCircle size={14} /> Unqualified</div>
-                        <div onClick={() => handleCloseOptionClick('Lost')} style={{ padding: '10px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#991b1b', fontSize: '0.9rem' }} className="dropdown-item"><ThumbsDown size={14} /> Lost</div>
+                        <div onClick={() => handleCloseOptionClick('Won')} style={{ padding: '10px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontSize: '0.9rem' }} className="dropdown-item">
+                            <ThumbsUp size={14} /> {getCloseStatusName('Won')}
+                        </div>
+                        <div onClick={() => handleCloseOptionClick('Unqualified')} style={{ padding: '10px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#991b1b', fontSize: '0.9rem' }} className="dropdown-item">
+                            <XCircle size={14} /> {getCloseStatusName('Unqualified')}
+                        </div>
+                        <div onClick={() => handleCloseOptionClick('Lost')} style={{ padding: '10px 15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#991b1b', fontSize: '0.9rem' }} className="dropdown-item">
+                            <ThumbsDown size={14} /> {getCloseStatusName('Lost')}
+                        </div>
                     </div>
                 )}
             </div>
@@ -158,20 +188,12 @@ const LeadDetails = ({
 
             {/* Right Sidebar */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                 {/* Tasks Section */}
-                 <div className="card" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <ClipboardList size={18} color="#2563eb" />
-                            <h3 style={{ margin: 0, fontSize: '1rem', color: '#1e293b' }}>Tasks</h3>
-                        </div>
-                        <button className="btn-xs primary" style={{fontSize:'0.7rem'}}>+ Add</button>
-                    </div>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                         <ClipboardList size={40} style={{ opacity: 0.2, marginBottom: '10px' }} />
-                         <p style={{ fontSize: '0.9rem' }}>No pending tasks</p>
-                    </div>
-                 </div>
+                <TaskSection 
+                    token={token}
+                    relatedToModule="Lead"
+                    relatedToId={lead.id}
+                    users={users}
+                />
             </div>
         </div>
 
@@ -180,21 +202,39 @@ const LeadDetails = ({
             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, backdropFilter: 'blur(2px)' }}>
                 <div className="card" style={{ width: '400px', padding: '24px' }}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-                        <h3 style={{ marginTop: 0, color: '#0f172a', fontSize:'1.2rem' }}>Mark as {closeStatus}</h3>
+                        <h3 style={{ marginTop: 0, color: '#0f172a', fontSize:'1.2rem' }}>Mark as {getCloseStatusName(closeStatus)}</h3>
                         <button onClick={() => {onCancelClose(); setIsDropdownOpen(false)}} style={{background:'none', border:'none', cursor:'pointer', color:'#64748b'}}><X size={20}/></button>
                     </div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#475569', fontWeight: '500' }}>Reason for closing:</label>
-                    <textarea 
-                        className="form-input" 
-                        rows="4" 
-                        value={closeReason} 
-                        onChange={e => setCloseReason(e.target.value)} 
-                        placeholder="e.g. Price too high / Competitor won"
-                        style={{width: '100%', resize: 'none'}}
-                    />
+                    {availableReasons.length > 0 ? (
+                        <>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#475569', fontWeight: '500' }}>Reason for closing:</label>
+                            <select
+                                className="form-input"
+                                value={closeReason}
+                                onChange={e => setCloseReason(e.target.value)}
+                                style={{ width: '100%' }}
+                            >
+                                <option value="">Select a reason...</option>
+                                {availableReasons.map(reason => (
+                                    <option key={reason.id} value={reason.description}>
+                                        {reason.description}
+                                    </option>
+                                ))}
+                            </select>
+                        </>
+                    ) : (
+                        <p style={{fontSize: '0.9rem', color: '#64748b', background: '#f8fafc', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0'}}>
+                            No specific exit reasons are configured for this outcome. You can close this lead directly.
+                        </p>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
                         <button className="btn-secondary" onClick={() => {onCancelClose(); setIsDropdownOpen(false)}}>Cancel</button>
-                        <button className="btn-primary" onClick={onConfirmClose}>Confirm</button>
+                        <button 
+                            className="btn-primary" 
+                            onClick={onConfirmClose}
+                            disabled={availableReasons.length > 0 && !closeReason}
+                            style={{ opacity: (availableReasons.length > 0 && !closeReason) ? 0.5 : 1, cursor: (availableReasons.length > 0 && !closeReason) ? 'not-allowed' : 'pointer' }}
+                        >Confirm</button>
                     </div>
                 </div>
             </div>

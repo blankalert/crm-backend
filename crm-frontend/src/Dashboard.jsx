@@ -56,7 +56,7 @@ function Dashboard() {
   const menuItems = [
     { name: 'Overview', icon: <LayoutDashboard size={20} />, path: '/dashboard/overview' },
     { name: 'Leads', icon: <Zap size={20} />, path: '/dashboard/leads' },
-    { name: 'Task', icon: <CheckSquare size={20} />, path: '/dashboard/tasks' },
+    { name: 'Tasks', icon: <CheckSquare size={20} />, path: '/dashboard/tasks' },
     { name: 'Orders', icon: <Package size={20} />, path: '/dashboard/orders' },
     { name: 'Contact', icon: <Phone size={20} />, path: '/dashboard/contacts' },
     { name: 'Customer', icon: <Users size={20} />, path: '/dashboard/customers' },
@@ -87,6 +87,7 @@ function Dashboard() {
   const getActiveTab = () => {
       const path = location.pathname;
       if (path.includes('/leads')) return 'Leads';
+      if (path.includes('/tasks')) return 'Tasks';
       if (path.includes('/overview')) return 'Overview';
       if (path.includes('/settings/customization/roles')) return 'Role Control';
       if (path.includes('/settings/users')) return 'User Control';

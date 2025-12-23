@@ -13,6 +13,8 @@ const tenantRoutes = require('./routes/tenantRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const leadRoutes = require('./routes/leadRoutes'); // <--- ADDED THIS
 const pipelineRoutes = require('./routes/pipelineRoutes');
+const taskRoutes = require('./routes/taskRoutes');
+
 
 const app = express();
 
@@ -27,6 +29,7 @@ app.use('/api/tenant', tenantRoutes);  // Company Profile
 app.use('/api/dashboard', dashboardRoutes); // Stats
 app.use('/api/leads', leadRoutes);     // <--- ADDED THIS (Fixes "Failed to create lead")
 app.use('/api/pipelines', pipelineRoutes);
+app.use('/api/tasks', taskRoutes);
 
 
 // Helper: Handle direct /api/permissions call by forwarding to roleRoutes

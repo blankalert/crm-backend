@@ -31,7 +31,7 @@ const Leads = () => {
   
   // FORM STATE
   const [leadForm, setLeadForm] = useState({ 
-      name: '', lead_date: new Date().toISOString().split('T')[0],
+      leadRID: '', name: '', lead_date: new Date().toISOString().split('T')[0],
       category: '', company_email: '', company_phone: '', lead_message: '', remark: '', 
       source: '', owner: '', status: 'New', pipeline: '', 
       req_amount: '', lead_type: 'Warm', priority: 'Medium', company_name: '', 
@@ -103,6 +103,7 @@ const Leads = () => {
           const fullLead = res.data;
           
           setLeadForm({
+              leadRID: fullLead.leadRID || fullLead.leadrid,
               name: fullLead.title || '',
               // ... map other fields ...
               lead_date: fullLead.lead_date ? fullLead.lead_date.split('T')[0] : '',
@@ -125,7 +126,7 @@ const Leads = () => {
       const firstStage = currentPipe?.stages[0]?.name || 'New';
 
       setLeadForm({ 
-          name: '', lead_date: new Date().toISOString().split('T')[0], category: '', company_email: '', company_phone: '', 
+          leadRID: '', name: '', lead_date: new Date().toISOString().split('T')[0], category: '', company_email: '', company_phone: '', 
           lead_message: '', remark: '', source: '', owner: '', 
           status: firstStage, pipeline: currentPipeName, 
           req_amount: '', lead_type: 'Warm', priority: 'Medium', company_name: '', city: '', state: '', 
@@ -146,6 +147,30 @@ const Leads = () => {
           fetchLeads();
           if(id) fetchLeadDetails(id); else setViewMode('kanban'); 
       } catch(err) { alert("Save Failed"); }
+  }
+
+  const confirmCloseLead = async () => {
+      if (!selectedLeadId || !closeStatus) return;
+      
+      const payload = {
+          status: closeStatus,
+          close_reason: closeReason,
+      };
+
+      try {
+          await axios.put(`http://localhost:3000/api/leads/${selectedLeadId}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+          
+          setShowClosePopup(false);
+          setCloseReason('');
+          setCloseStatus('');
+          
+          fetchLeads();
+          if (id) fetchLeadDetails(id);
+
+      } catch (err) {
+          console.error("Failed to close lead:", err);
+          alert("Failed to close lead.");
+      }
   }
 
   const handleStageSelect = (stage) => setTargetStage(stage);
@@ -241,9 +266,9 @@ const Leads = () => {
   const removeItem = (field, idx) => setLeadForm(p => ({...p, [field]: p[field].filter((_,i)=>i!==idx)}));
   const handleAddress = (k, v) => setLeadForm(p => ({...p, address: {...p.address, [k]: v}}));
   const initiateCloseLead = (status) => { setCloseStatus(status); setCloseReason(''); setShowClosePopup(true); }
-  const confirmCloseLead = async () => { /*...*/ } // Keep existing logic
 
   const leadColumns = [
+      { key: 'leadrid', label: 'ID' },
       { key: 'title', label: 'Name' }, { key: 'company_name', label: 'Company' },
       { key: 'pipeline', label: 'Pipeline' }, { key: 'status', label: 'Stage' }, 
       { key: 'req_amount', label: 'Value ($)' }, { key: 'agent_name', label: 'Owner' }, 
@@ -261,10 +286,13 @@ const Leads = () => {
                 onEdit={() => handleEditClick(leadDetail)}
                 activeTab={activeDetailTab}
                 setActiveTab={setActiveDetailTab}
+                users={users}
+                token={token}
                 
                 // Pass Active Pipeline Stages for Progress Bar
                 // We find the pipeline object matching lead.pipeline string
                 pipelineStages={pipelines.find(p => p.pipeline_name === leadDetail.pipeline)?.stages.map(s => s.name) || ['New', 'Contacted']}
+                pipelines={pipelines}
                 
                 targetStage={targetStage}
                 onStageSelect={handleStageSelect}

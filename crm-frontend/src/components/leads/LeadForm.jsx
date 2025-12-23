@@ -73,6 +73,12 @@ const LeadForm = ({
 
         <div className="card">
             <h4 style={{borderBottom:'1px solid #f1f5f9', paddingBottom:'10px', color:'#94a3b8', marginBottom:'20px'}}>Lead Information</h4>
+            {isEditing && form.leadRID && (
+                <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#64748b', marginBottom: '5px' }}>Lead ID</label>
+                    <input className="form-input" value={`#${form.leadRID}`} disabled style={{ background: '#f1f5f9', color: '#64748b', width: '120px', cursor: 'not-allowed' }} />
+                </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                 <div className="form-group"><label>Lead Name / Title</label><input className="form-input" value={form.name || ''} onChange={e=>onChange('name',e.target.value)} required /></div>
                 <div className="form-group"><label>Company</label><input className="form-input" value={form.company_name || ''} onChange={e=>onChange('company_name',e.target.value)} /></div>

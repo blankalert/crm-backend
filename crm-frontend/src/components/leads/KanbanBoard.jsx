@@ -21,6 +21,7 @@ const KanbanBoard = ({ leads, statuses, onDragStart, onDragOver, onDrop, onCardC
                                    onDragStart={(e) => onDragStart(e, lead.id)}
                                    onClick={() => onCardClick(lead)}
                                    style={{ background: 'white', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', cursor: 'pointer', position: 'relative' }}>
+                                  <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}>#{lead.leadRID || lead.leadrid}</div>
                                   <div style={{ fontWeight: '600', color: '#1e293b', marginBottom: '4px' }}>{lead.title}</div>
                                   <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '8px' }}>{lead.company_name}</div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#475569', borderTop: '1px solid #f8fafc', paddingTop: '10px' }}>

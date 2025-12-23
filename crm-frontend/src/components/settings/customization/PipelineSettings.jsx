@@ -14,7 +14,10 @@ const PipelineSettings = ({ token }) => {
       module: 'Lead', // Default
       is_active: true,
       stages: [],
-      exit_reasons: []
+      exit_reasons: [],
+      won_stage_name: 'Won',
+      lost_stage_name: 'Lost',
+      unqualified_stage_name: 'Unqualified'
   })
 
   useEffect(() => {
@@ -83,7 +86,10 @@ const PipelineSettings = ({ token }) => {
           module: p.module,
           is_active: p.is_active,
           stages: p.stages || [],
-          exit_reasons: p.exit_reasons || []
+          exit_reasons: p.exit_reasons || [],
+          won_stage_name: p.won_stage_name || 'Won',
+          lost_stage_name: p.lost_stage_name || 'Lost',
+          unqualified_stage_name: p.unqualified_stage_name || 'Unqualified'
       });
       setIsFormOpen(true);
   }
@@ -104,7 +110,18 @@ const PipelineSettings = ({ token }) => {
                 <p style={{ margin: '5px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Define sales stages and exit criteria.</p>
             </div>
             {!isFormOpen && (
-                <button onClick={() => { setIsFormOpen(true); setForm({ id:null, pipeline_name:'', module:'Lead', is_active:true, stages:[], exit_reasons:[] }) }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <button onClick={() => { 
+                    setIsFormOpen(true); 
+                    setForm({ 
+                        id:null, 
+                        pipeline_name:'', 
+                        module:'Lead', 
+                        is_active:true, 
+                        stages:[], 
+                        exit_reasons:[],
+                        won_stage_name: 'Won', lost_stage_name: 'Lost', unqualified_stage_name: 'Unqualified'
+                    }) 
+                }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <Plus size={18} /> New Pipeline
                 </button>
             )}
@@ -137,32 +154,63 @@ const PipelineSettings = ({ token }) => {
                 </div>
 
                 {/* EXIT REASONS */}
-                <h4 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Closure Reasons</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <h4 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop:'30px' }}>Closure Settings</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '20px', background: '#f8fafc', padding: '15px', borderRadius: '8px' }}>
+                    <div className="form-group">
+                        <label>Won Stage Name</label>
+                        <input className="form-input" value={form.won_stage_name} onChange={e => setForm({...form, won_stage_name: e.target.value})} placeholder="e.g. Won" />
+                    </div>
+                    <div className="form-group">
+                        <label>Lost Stage Name</label>
+                        <input className="form-input" value={form.lost_stage_name} onChange={e => setForm({...form, lost_stage_name: e.target.value})} placeholder="e.g. Lost" />
+                    </div>
+                    <div className="form-group">
+                        <label>Unqualified Stage Name</label>
+                        <input className="form-input" value={form.unqualified_stage_name} onChange={e => setForm({...form, unqualified_stage_name: e.target.value})} placeholder="e.g. Unqualified" />
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+                    {/* WON REASONS */}
+                    <div style={{ background: '#f0fdf4', padding: '15px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                        <h5 style={{ margin: '0 0 10px 0', color: '#166534' }}>Won Reasons</h5>
+                        {form.exit_reasons.filter(r => r.reason_type === 'Won').map((r, idx) => (
+                            <div key={idx} style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
+                                <input className="form-input" placeholder="e.g. Successful Demo" value={r.description} onChange={e => {
+                                    const realIdx = form.exit_reasons.findIndex(original => original === r);
+                                    updateReason(realIdx, e.target.value);
+                                }} />
+                                <button onClick={() => removeReason(form.exit_reasons.findIndex(original => original === r))} style={{ color: '#ef4444', border: 'none', background: 'none' }}><X size={14}/></button>
+                            </div>
+                        ))}
+                        <button onClick={() => addReason('Won')} className="btn-xs" style={{marginTop:'5px'}}>+ Add Reason</button>
+                    </div>
+
+                    {/* LOST REASONS */}
                     <div style={{ background: '#fff1f2', padding: '15px', borderRadius: '8px', border: '1px solid #fecdd3' }}>
                         <h5 style={{ margin: '0 0 10px 0', color: '#991b1b' }}>Lost Reasons</h5>
                         {form.exit_reasons.filter(r => r.reason_type === 'Lost').map((r, idx) => (
                             <div key={idx} style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
                                 <input className="form-input" placeholder="e.g. Too Expensive" value={r.description} onChange={e => {
-                                    // Find index in main array
-                                    const realIdx = form.exit_reasons.indexOf(r);
+                                    const realIdx = form.exit_reasons.findIndex(original => original === r);
                                     updateReason(realIdx, e.target.value);
                                 }} />
-                                <button onClick={() => removeReason(form.exit_reasons.indexOf(r))} style={{ color: '#ef4444', border: 'none', background: 'none' }}><X size={14}/></button>
+                                <button onClick={() => removeReason(form.exit_reasons.findIndex(original => original === r))} style={{ color: '#ef4444', border: 'none', background: 'none' }}><X size={14}/></button>
                             </div>
                         ))}
                         <button onClick={() => addReason('Lost')} className="btn-xs" style={{marginTop:'5px'}}>+ Add Reason</button>
                     </div>
 
+                    {/* UNQUALIFIED REASONS */}
                     <div style={{ background: '#fef2f2', padding: '15px', borderRadius: '8px', border: '1px solid #fecaca' }}>
                          <h5 style={{ margin: '0 0 10px 0', color: '#991b1b' }}>Unqualified Reasons</h5>
                          {form.exit_reasons.filter(r => r.reason_type === 'Unqualified').map((r, idx) => (
                             <div key={idx} style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
                                 <input className="form-input" placeholder="e.g. Bad Contact Info" value={r.description} onChange={e => {
-                                    const realIdx = form.exit_reasons.indexOf(r);
+                                    const realIdx = form.exit_reasons.findIndex(original => original === r);
                                     updateReason(realIdx, e.target.value);
                                 }} />
-                                <button onClick={() => removeReason(form.exit_reasons.indexOf(r))} style={{ color: '#ef4444', border: 'none', background: 'none' }}><X size={14}/></button>
+                                <button onClick={() => removeReason(form.exit_reasons.findIndex(original => original === r))} style={{ color: '#ef4444', border: 'none', background: 'none' }}><X size={14}/></button>
                             </div>
                         ))}
                         <button onClick={() => addReason('Unqualified')} className="btn-xs" style={{marginTop:'5px'}}>+ Add Reason</button>

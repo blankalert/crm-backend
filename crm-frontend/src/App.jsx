@@ -14,6 +14,7 @@ import CompanyProfile from './components/settings/customization/CompanyProfile'
 import PipelineSettings from './components/settings/customization/PipelineSettings'
 
 import Leads from './components/leads/Leads'
+import Tasks from './components/tasks/Tasks'
 
 
 // --- GLOBAL AUTH INTERCEPTOR ---
@@ -130,7 +131,7 @@ function App() {
             <Route path="settings/company" element={<Navigate to="customization/company" replace />} />
 
             {/* Fallbacks */}
-            <Route path="tasks" element={<div>Tasks Module</div>} />
+            <Route path="tasks" element={<Tasks />} />
             <Route path="orders" element={<div>Orders Module</div>} />
             <Route path="contacts" element={<div>Contacts Module</div>} />
             <Route path="customers" element={<div>Customers Module</div>} />
