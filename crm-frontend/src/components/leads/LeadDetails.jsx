@@ -1,7 +1,19 @@
 import React, { useState } from 'react'
-import { ArrowLeft, Edit, Phone, Mail, FileText, MessageSquare, ClipboardList, CheckCircle, ChevronDown, ThumbsUp, XCircle, ThumbsDown, Clock, User, X } from 'lucide-react'
+import { ArrowLeft, Edit, Phone, Mail, FileText, MessageSquare, ClipboardList, CheckCircle, ChevronDown, ThumbsUp, XCircle, ThumbsDown, Clock, User, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import TaskSection from './TaskSection'
 
+const DetailRow = ({ label, value, isTag, tagColor }) => (
+    <div style={{ marginBottom: '15px' }}>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px', fontWeight: '600' }}>{label}</label>
+        {isTag ? (
+            <span style={{ background: tagColor === 'blue' ? '#eff6ff' : '#f1f5f9', color: tagColor === 'blue' ? '#1d4ed8' : '#475569', padding: '4px 10px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '500', display: 'inline-block' }}>
+                {value || '-'}
+            </span>
+        ) : (
+            <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: '500', lineHeight: '1.5', wordBreak: 'break-word' }}>{value || '-'}</div>
+        )}
+    </div>
+)
 
 const LeadDetails = ({
     lead, onBack, onEdit, activeTab, setActiveTab, pipelines, users, token,
@@ -11,7 +23,8 @@ const LeadDetails = ({
     targetStage, onStageSelect, onConfirmStageUpdate, 
     
     onCloseLead, showClosePopup, closeStatus, closeReason, setCloseReason,
-    onConfirmClose, onCancelClose, getStatusColor, isClosed, currentStageIndex
+    onConfirmClose, onCancelClose, getStatusColor, isClosed, currentStageIndex,
+    onNavigateLead, hasPrev, hasNext // Navigation Props
 }) => {
 
   const formatDate = (dateString) => {
@@ -22,9 +35,10 @@ const LeadDetails = ({
   };
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState('general');
   const handleCloseOptionClick = (status) => { setIsDropdownOpen(false); onCloseLead(status); };
 
-  const currentPipeline = pipelines.find(p => p.pipeline_name === lead.pipeline);
+  const currentPipeline = pipelines.find(p => p.id === lead.pipeline);
 
   const getCloseStatusName = (statusType) => {
       if (!currentPipeline) return statusType;
@@ -49,6 +63,13 @@ const LeadDetails = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: 'white', padding: '12px 20px', borderBottom: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <button onClick={onBack} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', display: 'flex', gap: '6px', color: '#64748b', fontSize: '0.85rem', fontWeight: '500', alignItems: 'center' }}><ArrowLeft size={16} /> Back</button>
+                
+                {/* Navigation Arrows */}
+                <div style={{ display: 'flex', gap: '2px', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                    <button onClick={() => onNavigateLead('prev')} disabled={!hasPrev} style={{ background: 'white', border: 'none', padding: '6px 8px', cursor: hasPrev ? 'pointer' : 'not-allowed', color: hasPrev ? '#334155' : '#cbd5e1', borderRight: '1px solid #f1f5f9' }} title="Previous Lead"><ChevronLeft size={18} /></button>
+                    <button onClick={() => onNavigateLead('next')} disabled={!hasNext} style={{ background: 'white', border: 'none', padding: '6px 8px', cursor: hasNext ? 'pointer' : 'not-allowed', color: hasNext ? '#334155' : '#cbd5e1' }} title="Next Lead"><ChevronRight size={18} /></button>
+                </div>
+
                 <div>
                     <h2 style={{ margin: 0, color: '#1e293b', fontSize: '1.4rem' }}>
                         <span style={{ color: '#94a3b8', marginRight: '10px', fontSize: '1.2rem' }}>#{lead.leadRID || lead.leadrid}</span>
@@ -114,6 +135,14 @@ const LeadDetails = ({
                         </button>
                     </div>
                 )}
+
+                {isClosed && (
+                    <div style={{ marginTop: '6px', color: '#0f172a', fontSize: '0.9rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ textTransform: 'uppercase' }}>{lead.status}:</span>
+                        <span style={{ fontWeight: '600' }}>{lead.closed_reason || 'No reason provided'}</span>
+                        {lead.closed_time && <span style={{ color: '#64748b', fontWeight: '500', fontSize: '0.85rem', marginLeft: '4px' }}> — {formatDate(lead.closed_time)}</span>}
+                    </div>
+                )}
             </div>
 
             {/* Close Dropdown */}
@@ -147,30 +176,85 @@ const LeadDetails = ({
             {/* Left Content */}
             <div style={{ flex: 3, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '5px' }}>
                 {/* Details Section */}
-                <div className="card">
-                    {/* ... (Details Card Content) ... */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-                        <FileText size={18} color="#2563eb" />
-                        <h3 style={{ margin: 0, fontSize: '1rem', color: '#1e293b' }}>Details</h3>
+                <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    {/* TAB HEADER */}
+                    <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                        {['General', 'Contact', 'Address'].map(tab => (
+                            <button 
+                                key={tab}
+                                onClick={() => setDetailTab(tab.toLowerCase())}
+                                style={{
+                                    flex: 1,
+                                    padding: '12px 16px',
+                                    background: detailTab === tab.toLowerCase() ? 'white' : 'transparent',
+                                    border: 'none',
+                                    borderBottom: detailTab === tab.toLowerCase() ? '2px solid #2563eb' : '2px solid transparent',
+                                    color: detailTab === tab.toLowerCase() ? '#2563eb' : '#64748b',
+                                    fontWeight: '600',
+                                    fontSize: '0.9rem',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                {tab}
+                            </button>
+                        ))}
                     </div>
-                    {/* ... (Grid Layout for details) ... */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
-                         {/* ... Lead Info ... */}
-                         <div>
-                            <h4 style={{ color:'#94a3b8', fontSize:'0.75rem', textTransform:'uppercase', marginBottom:'15px', letterSpacing:'0.5px' }}>Lead Information</h4>
-                            <div className="detail-row"><label>Amount</label><span>${lead.req_amount || '0.00'}</span></div>
-                            <div className="detail-row"><label>Pipeline</label><span>{lead.pipeline}</span></div>
-                            <div className="detail-row"><label>Priority</label><span>{lead.priority}</span></div>
-                            <div className="detail-row"><label>Source</label><span>{lead.source || '-'}</span></div>
-                            <div className="detail-row"><label>Lead Type</label><span style={{background:'#e0f2fe', color:'#0284c7', padding:'2px 8px', borderRadius:'4px', fontSize:'0.85rem'}}>{lead.lead_type}</span></div>
-                        </div>
-                        {/* ... Contact Info ... */}
-                        <div>
-                             <h4 style={{ color:'#94a3b8', fontSize:'0.75rem', textTransform:'uppercase', marginBottom:'15px', letterSpacing:'0.5px' }}>Contact</h4>
-                             <div className="detail-row"><label>Email</label><span>{lead.company_email || '-'}</span></div>
-                             <div className="detail-row"><label>Phone</label><span>{lead.company_phone || '-'}</span></div>
-                             <div className="detail-row"><label>Address</label><span>{lead.address?.line ? `${lead.address.line}, ` : ''}{lead.city}</span></div>
-                        </div>
+
+                    {/* TAB BODY */}
+                    <div style={{ padding: '24px', overflowY: 'auto', maxHeight: '600px' }}>
+                        {detailTab === 'general' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <DetailRow label="Lead Title" value={lead.title} />
+                                <DetailRow label="Company" value={lead.company_name} />
+                                <DetailRow label="Pipeline" value={currentPipeline?.pipeline_name || lead.pipeline} />
+                                <DetailRow label="Current Stage" value={lead.status} isTag tagColor="blue" />
+                                <DetailRow label="Potential Value" value={lead.req_amount ? `$${lead.req_amount}` : '$0.00'} />
+                                <DetailRow label="Lead Source" value={lead.source} />
+                                <DetailRow label="Priority" value={lead.priority} />
+                                <DetailRow label="Type" value={lead.lead_type} isTag tagColor="gray" />
+                                <div style={{ gridColumn: '1 / -1' }}>
+                                    <DetailRow label="Description" value={lead.lead_message} />
+                                </div>
+                            </div>
+                        )}
+                        {detailTab === 'contact' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <DetailRow label="Primary Email" value={lead.company_email} />
+                                <DetailRow label="Primary Phone" value={lead.company_phone} />
+                                {lead.emails && lead.emails.length > 0 && (
+                                    <div style={{ gridColumn: '1 / -1' }}>
+                                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', fontWeight: '600' }}>Additional Emails</label>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                            {lead.emails.map((e, i) => (
+                                                <span key={i} style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem', color: '#334155' }}>{e.email} <span style={{opacity:0.6}}>({e.type})</span></span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {lead.phones && lead.phones.length > 0 && (
+                                    <div style={{ gridColumn: '1 / -1' }}>
+                                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', fontWeight: '600' }}>Additional Phones</label>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                            {lead.phones.map((p, i) => (
+                                                <span key={i} style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem', color: '#334155' }}>{p.number} <span style={{opacity:0.6}}>({p.type})</span></span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {detailTab === 'address' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <div style={{ gridColumn: '1 / -1' }}>
+                                    <DetailRow label="Street Address" value={lead.address?.line || lead.address?.address_line} />
+                                </div>
+                                <DetailRow label="City" value={lead.city || lead.address?.city} />
+                                <DetailRow label="State" value={lead.state || lead.address?.state} />
+                                <DetailRow label="Zipcode" value={lead.address?.zipcode} />
+                                <DetailRow label="Country" value={lead.address?.country || 'India'} />
+                            </div>
+                        )}
                     </div>
                 </div>
 

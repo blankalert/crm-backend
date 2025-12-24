@@ -8,7 +8,8 @@ import '../App.css'
 
 const AdvancedTable = ({ 
     tableName, title, columns, data, onAdd, onEdit, onDelete, 
-    customRenderer, headerActions, onRowClick // <-- Prop used here
+    customRenderer, headerActions, onRowClick, disablePagination = false,
+    onSearch, searchValue, onSort, currentSort // <-- New props for Server-Side control
 }) => {
   // ... [ALL STATE & EFFECTS REMAIN THE SAME] ...
   const [searchQuery, setSearchQuery] = useState('')
@@ -48,10 +49,14 @@ const AdvancedTable = ({
     if (savedSets) setSavedFilterSets(JSON.parse(savedSets))
   }, [columns, tableName])
 
+  // Use external search value if provided, otherwise internal state
+  const effectiveSearch = onSearch ? (searchValue || '') : searchQuery;
+  const effectiveSort = onSort ? (currentSort || { key: null, direction: 'asc' }) : sortConfig;
+
   const processedData = useMemo(() => {
     let result = [...data]
 
-    if (searchQuery) {
+    if (!onSearch && searchQuery) {
         const lowerQuery = searchQuery.toLowerCase()
         result = result.filter(row => 
             columns.some(col => String(row[col.key] || '').toLowerCase().includes(lowerQuery))
@@ -75,7 +80,7 @@ const AdvancedTable = ({
         })
     }
 
-    if (sortConfig.key) {
+    if (!onSort && sortConfig.key) {
         result.sort((a, b) => {
             const valA = a[sortConfig.key] || ''
             const valB = b[sortConfig.key] || ''
@@ -85,12 +90,18 @@ const AdvancedTable = ({
         })
     }
     return result
-  }, [data, searchQuery, activeFilters, sortConfig, columns])
+  }, [data, searchQuery, activeFilters, sortConfig, columns, onSearch, onSort])
 
   const totalPages = Math.ceil(processedData.length / itemsPerPage)
-  const paginatedData = processedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  const paginatedData = disablePagination ? processedData : processedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  const handleSort = (key) => setSortConfig(current => ({ key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' }))
+  const handleSort = (key) => {
+      if (onSort) {
+          onSort(key);
+      } else {
+          setSortConfig(current => ({ key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' }))
+      }
+  }
   
   const toggleColumn = (colKey) => {
       let newVis = visibleColumns.includes(colKey) ? visibleColumns.filter(k => k !== colKey) : [...visibleColumns, colKey]
@@ -140,10 +151,10 @@ const AdvancedTable = ({
                 <Search size={18} />
                 <input 
                     placeholder={`Search ${title}...`} 
-                    value={searchQuery}
-                    onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                    value={effectiveSearch}
+                    onChange={e => { onSearch ? onSearch(e.target.value) : setSearchQuery(e.target.value); setCurrentPage(1); }}
                 />
-                {searchQuery && <X size={14} style={{cursor:'pointer', position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8'}} onClick={() => setSearchQuery('')} />}
+                {effectiveSearch && <X size={14} style={{cursor:'pointer', position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8'}} onClick={() => { onSearch ? onSearch('') : setSearchQuery(''); }} />}
             </div>
 
             {/* 2. SAVED VIEWS */}
@@ -257,12 +268,12 @@ const AdvancedTable = ({
                                             onDragEnd={handleDragEnd}
                                             onClick={() => handleSort(colKey)}
                                             style={{ width: `${width}px` }}
-                                            className={sortConfig.key === colKey ? 'sorted' : ''}
+                                            className={effectiveSort.key === colKey ? 'sorted' : ''}
                                         >
                                             <div className="th-content">
                                                 <GripVertical size={14} className="drag-handle" />
                                                 <span>{colDef.label}</span>
-                                                {sortConfig.key === colKey && (sortConfig.direction === 'asc' ? <ArrowDown size={14} /> : <ArrowUp size={14} />)} {/* <-- UPDATED ICONS */}
+                                                {effectiveSort.key === colKey && (effectiveSort.direction === 'asc' ? <ArrowDown size={14} /> : <ArrowUp size={14} />)} {/* <-- UPDATED ICONS */}
                                             </div>
                                             <div className="resize-handle" onMouseDown={(e) => startResize(e, colKey)} onClick={(e) => e.stopPropagation()} />
                                         </th>
@@ -298,6 +309,7 @@ const AdvancedTable = ({
                     </table>
                 </div>
                 {/* Pagination */}
+                {!disablePagination && (
                 <div className="adv-pagination">
                     <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Showing <b>{(currentPage - 1) * itemsPerPage + 1}</b> to <b>{Math.min(currentPage * itemsPerPage, processedData.length)}</b> of <b>{processedData.length}</b> entries</div>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -311,6 +323,7 @@ const AdvancedTable = ({
                         </div>
                     </div>
                 </div>
+                )}
             </>
         )}
     </div>

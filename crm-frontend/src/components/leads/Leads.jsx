@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { 
-  Plus, LayoutList, LayoutGrid, Filter 
+  Plus, LayoutList, LayoutGrid, Filter, ChevronLeft, ChevronRight, Search 
 } from 'lucide-react'
 import '../../App.css'
 import AdvancedTable from '../AdvancedTable'
@@ -11,6 +11,25 @@ import AdvancedTable from '../AdvancedTable'
 import LeadDetails from './LeadDetails'
 import LeadForm from './LeadForm'
 import KanbanBoard from './KanbanBoard'
+
+// Define columns outside component to keep reference stable
+const LEAD_COLUMNS = [
+    { key: 'leadrid', label: 'ID' },
+    { key: 'title', label: 'Name' }, 
+    { key: 'company_name', label: 'Company' },
+    { key: 'pipeline_name', label: 'Pipeline' }, 
+    { key: 'status', label: 'Stage' }, 
+    { key: 'req_amount', label: 'Value ($)' }, 
+    { key: 'agent_name', label: 'Owner' }, 
+    { key: 'priority', label: 'Priority' },
+    { key: 'company_email', label: 'Email' },
+    { key: 'company_phone', label: 'Phone' },
+    { key: 'lead_date', label: 'Date' },
+    { key: 'source', label: 'Source' },
+    { key: 'category', label: 'Category' },
+    { key: 'city', label: 'City' },
+    { key: 'state', label: 'State' }
+];
 
 const Leads = () => {
   const { token } = useOutletContext();
@@ -21,13 +40,21 @@ const Leads = () => {
   const [users, setUsers] = useState([]) 
   const [pipelines, setPipelines] = useState([]) // Stores full pipeline objects
   
+  // PAGINATION & FILTER STATE
+  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 })
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' })
+  
   // VIEW STATE
   const [viewMode, setViewMode] = useState('list') 
+  const [preferredView, setPreferredView] = useState('list') // Track user preference (list/kanban)
   const [selectedPipelineId, setSelectedPipelineId] = useState('') // Tracks active pipeline for Kanban
   
   // DETAIL VIEW DATA
   const [leadDetail, setLeadDetail] = useState(null)
   const [selectedLeadId, setSelectedLeadId] = useState(null)
+  const [navigationList, setNavigationList] = useState([]) // Stores the context list for Next/Prev navigation
+  const [navigationMeta, setNavigationMeta] = useState({}) // Stores metadata for fetching more (pagination/infinite scroll)
   
   // FORM STATE
   const [leadForm, setLeadForm] = useState({ 
@@ -56,19 +83,39 @@ const Leads = () => {
 
   useEffect(() => {
     if(token) {
-        fetchLeads()
         fetchUsers()
         fetchPipelines()
     }
   }, [token])
 
+  // Fetch leads whenever pagination, search, or view context changes
+  useEffect(() => {
+    if(token && viewMode === 'list') fetchLeads();
+  }, [token, pagination.page, pagination.limit, searchTerm, viewMode, selectedPipelineId, sortConfig])
+
   useEffect(() => {
       if (id) fetchLeadDetails(id);
-      else { setLeadDetail(null); setSelectedLeadId(null); if (viewMode === 'detail') setViewMode('kanban'); }
-  }, [id, token])
+      else { 
+          setLeadDetail(null); 
+          setSelectedLeadId(null); 
+          if (viewMode === 'detail') setViewMode(preferredView); 
+      }
+  }, [id, token, preferredView])
 
   const fetchLeads = async () => {
-    try { const res = await axios.get('http://localhost:3000/api/leads', { headers: { Authorization: `Bearer ${token}` } }); setLeads(res.data); } catch(e){ console.error(e); }
+    try { 
+        const params = {
+            page: pagination.page,
+            limit: pagination.limit,
+            search: searchTerm,
+            pipeline: viewMode === 'kanban' ? selectedPipelineId : '', // Filter by pipeline on server if in Kanban
+            sort_by: sortConfig.key,
+            sort_order: sortConfig.direction.toUpperCase()
+        };
+        const res = await axios.get('http://localhost:3000/api/leads', { headers: { Authorization: `Bearer ${token}` }, params }); 
+        setLeads(res.data.data); 
+        setPagination(prev => ({ ...prev, ...res.data.pagination }));
+    } catch(e){ console.error(e); }
   }
   const fetchUsers = async () => {
     try { const res = await axios.get('http://localhost:3000/api/users', { headers: { Authorization: `Bearer ${token}` } }); setUsers(res.data); } catch(e){ console.error(e); }
@@ -94,7 +141,11 @@ const Leads = () => {
   }
 
   // --- ACTIONS ---
-  const handleRowClick = (lead) => { navigate(`/dashboard/leads/details/${lead.id}`); }
+  const handleRowClick = (lead, contextList, meta = {}) => { 
+      setNavigationList(contextList || leads);
+      setNavigationMeta(meta);
+      navigate(`/dashboard/leads/details/${lead.id}`); 
+  }
 
   const handleEditClick = async (leadOrId) => {
       const leadId = leadOrId.id || leadOrId;
@@ -122,13 +173,12 @@ const Leads = () => {
   const handleAddNew = () => {
       // Default to current Kanban Pipeline
       const currentPipe = pipelines.find(p => p.id === selectedPipelineId);
-      const currentPipeName = currentPipe?.pipeline_name || '';
       const firstStage = currentPipe?.stages[0]?.name || 'New';
 
       setLeadForm({ 
           leadRID: '', name: '', lead_date: new Date().toISOString().split('T')[0], category: '', company_email: '', company_phone: '', 
           lead_message: '', remark: '', source: '', owner: '', 
-          status: firstStage, pipeline: currentPipeName, 
+          status: firstStage, pipeline: currentPipe?.id || '', 
           req_amount: '', lead_type: 'Warm', priority: 'Medium', company_name: '', city: '', state: '', 
           phones: [], emails: [], address: { line: '', city: '', state: '', zipcode: '' }
       });
@@ -208,24 +258,44 @@ const Leads = () => {
       return {bg:'#f1f5f9',t:'#475569',b:'#cbd5e1'};
   }
 
-  const renderKanban = useCallback((filteredLeads) => {
-      // Filter leads by Pipeline Name too
-      const activePipeName = pipelines.find(p => p.id === selectedPipelineId)?.pipeline_name;
-      // If no pipeline selected yet (loading), don't filter strictly or show empty
-      const pipelineLeads = activePipeName 
-          ? filteredLeads.filter(l => l.pipeline === activePipeName)
-          : filteredLeads; 
-      
-      const currentStatuses = getCurrentPipelineStages();
-
+  const renderKanban = useCallback((_data, visibleColumns) => {
       return (
           <KanbanBoard 
-              leads={pipelineLeads} statuses={currentStatuses} 
-              onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} 
-              onCardClick={handleRowClick} getStatusColor={getStatusColor}
+              token={token}
+              pipelineId={selectedPipelineId}
+              statuses={getCurrentPipelineStages()}
+              onCardClick={handleRowClick}
+              getStatusColor={getStatusColor}
+              filters={{ search: searchTerm }}
+              visibleColumns={visibleColumns}
+              columns={LEAD_COLUMNS}
+              onEdit={handleEditClick}
+              pipelines={pipelines}
           />
       )
-  }, [leads, draggedLeadId, selectedPipelineId, pipelines]);
+  }, [token, selectedPipelineId, pipelines, searchTerm]);
+
+  // --- NAVIGATION HANDLER ---
+  const handleLeadNavigation = (direction) => {
+      if (!selectedLeadId || navigationList.length === 0) return;
+      
+      const currentIndex = navigationList.findIndex(l => l.id === selectedLeadId);
+      if (currentIndex === -1) return;
+
+      const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+      
+      if (nextIndex >= 0 && nextIndex < navigationList.length) {
+          navigate(`/dashboard/leads/details/${navigationList[nextIndex].id}`);
+      }
+  }
+
+  // --- SORT HANDLER ---
+  const handleSort = (key) => {
+      setSortConfig(current => ({
+          key,
+          direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+      }));
+  };
 
   // --- HEADER ACTIONS ---
   const headerActions = (
@@ -241,25 +311,14 @@ const Leads = () => {
           </select>
 
           <div style={{ display: 'flex', gap: '5px', background: '#e2e8f0', padding: '4px', borderRadius: '6px' }}>
-              <button onClick={() => setViewMode('list')} style={{ background: viewMode === 'list' ? 'white' : 'transparent', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><LayoutList size={18} color={viewMode==='list'?'#2563eb':'#64748b'} /></button>
-              <button onClick={() => setViewMode('kanban')} style={{ background: viewMode === 'kanban' ? 'white' : 'transparent', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><LayoutGrid size={18} color={viewMode==='kanban'?'#2563eb':'#64748b'} /></button>
+              <button onClick={() => { setViewMode('list'); setPreferredView('list'); }} style={{ background: viewMode === 'list' ? 'white' : 'transparent', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><LayoutList size={18} color={viewMode==='list'?'#2563eb':'#64748b'} /></button>
+              <button onClick={() => { setViewMode('kanban'); setPreferredView('kanban'); }} style={{ background: viewMode === 'kanban' ? 'white' : 'transparent', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><LayoutGrid size={18} color={viewMode==='kanban'?'#2563eb':'#64748b'} /></button>
           </div>
       </div>
   )
 
   // ... [Handlers: handleDelete, onDragStart/Over/Drop, etc. - keep existing logic]
   const handleDelete = async (lead) => { /*...*/ }
-  const onDragStart = (e, leadId) => { setDraggedLeadId(leadId); e.dataTransfer.effectAllowed = "move"; }
-  const onDragOver = (e) => { e.preventDefault(); }
-  const onDrop = async (e, newStatus) => {
-      e.preventDefault(); if (!draggedLeadId) return;
-      // Optimistic update
-      const updatedLeads = leads.map(l => l.id === draggedLeadId ? { ...l, status: newStatus } : l);
-      setLeads(updatedLeads);
-      try { await axios.put(`http://localhost:3000/api/leads/${draggedLeadId}`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }); fetchLeads(); } 
-      catch(err) { fetchLeads(); }
-      setDraggedLeadId(null);
-  }
   const handleChange = (field, val) => setLeadForm(p => ({...p, [field]: val}));
   const handleArrayChange = (field, idx, key, val) => { const arr = [...leadForm[field]]; arr[idx][key] = val; setLeadForm(p => ({...p, [field]: arr})); }
   const addItem = (field, item) => setLeadForm(p => ({...p, [field]: [...p[field], item]}));
@@ -267,13 +326,10 @@ const Leads = () => {
   const handleAddress = (k, v) => setLeadForm(p => ({...p, address: {...p.address, [k]: v}}));
   const initiateCloseLead = (status) => { setCloseStatus(status); setCloseReason(''); setShowClosePopup(true); }
 
-  const leadColumns = [
-      { key: 'leadrid', label: 'ID' },
-      { key: 'title', label: 'Name' }, { key: 'company_name', label: 'Company' },
-      { key: 'pipeline', label: 'Pipeline' }, { key: 'status', label: 'Stage' }, 
-      { key: 'req_amount', label: 'Value ($)' }, { key: 'agent_name', label: 'Owner' }, 
-      { key: 'priority', label: 'Priority' }
-  ];
+  // Helper to determine if nav buttons should be enabled
+  const currentNavIndex = navigationList.findIndex(l => l.id === selectedLeadId);
+  const canGoPrev = currentNavIndex > 0 || (navigationMeta.type === 'list' && navigationMeta.page > 1);
+  const canGoNext = (currentNavIndex < navigationList.length - 1 && navigationList.length > 0) || (navigationMeta.type === 'list' && navigationMeta.page < navigationMeta.totalPages) || (navigationMeta.type === 'kanban' && navigationMeta.hasMore);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '20px' }}>
@@ -290,8 +346,8 @@ const Leads = () => {
                 token={token}
                 
                 // Pass Active Pipeline Stages for Progress Bar
-                // We find the pipeline object matching lead.pipeline string
-                pipelineStages={pipelines.find(p => p.pipeline_name === leadDetail.pipeline)?.stages.map(s => s.name) || ['New', 'Contacted']}
+                // We find the pipeline object matching lead.pipeline ID
+                pipelineStages={pipelines.find(p => p.id === leadDetail.pipeline)?.stages.map(s => s.name) || ['New', 'Contacted']}
                 pipelines={pipelines}
                 
                 targetStage={targetStage}
@@ -307,25 +363,85 @@ const Leads = () => {
                 onCancelClose={() => setShowClosePopup(false)}
                 getStatusColor={getStatusColor}
                 isClosed={closedStages.includes(leadDetail.status)}
-                // Fix index calc for dynamic stages
-                currentStageIndex={(pipelines.find(p => p.pipeline_name === leadDetail.pipeline)?.stages.map(s => s.name) || []).indexOf(leadDetail.status)}
+                // Fix index calc for dynamic stages (using ID)
+                currentStageIndex={(pipelines.find(p => p.id === leadDetail.pipeline)?.stages.map(s => s.name) || []).indexOf(leadDetail.status)}
+                
+                // Navigation Props
+                onNavigateLead={handleLeadNavigation}
+                hasPrev={canGoPrev}
+                hasNext={canGoNext}
             />
         )}
 
         {/* CASE 2: LIST / KANBAN */}
         {!id && viewMode !== 'edit' && (
-            <AdvancedTable 
-                tableName="leads_module"
-                title="Sales Pipeline"
-                columns={leadColumns}
-                data={leads} // Filtered by pipeline inside renderKanban, but full list passed to Table
-                onAdd={handleAddNew}
-                onDelete={handleDelete}
-                onEdit={handleEditClick} 
-                onRowClick={handleRowClick}
-                headerActions={headerActions}
-                customRenderer={viewMode === 'kanban' ? renderKanban : null}
-            />
+            <>
+                <AdvancedTable 
+                    tableName="leads_module"
+                    title="Sales Pipeline"
+                    columns={LEAD_COLUMNS}
+                    data={viewMode === 'list' ? leads.map(l => ({ ...l, pipeline_name: pipelines.find(p => p.id === l.pipeline)?.pipeline_name || '-' })) : []}
+                    onAdd={handleAddNew}
+                    onDelete={handleDelete}
+                    onEdit={handleEditClick} 
+                    onRowClick={(lead) => handleRowClick(lead, leads, {
+                        type: 'list',
+                        page: pagination.page,
+                        totalPages: pagination.totalPages,
+                        limit: pagination.limit,
+                        search: searchTerm,
+                        sort_by: sortConfig.key,
+                        sort_order: sortConfig.direction.toUpperCase()
+                    })}
+                    headerActions={headerActions}
+                    customRenderer={viewMode === 'kanban' ? renderKanban : null}
+                    disablePagination={true}
+                    
+                    // Server-Side Props
+                    onSearch={(val) => { setSearchTerm(val); setPagination(p => ({...p, page: 1})); }}
+                    searchValue={searchTerm}
+                    onSort={handleSort}
+                    currentSort={sortConfig}
+                />
+                
+                {/* PAGINATION CONTROLS */}
+                {viewMode === 'list' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 0', borderTop: '1px solid #e2e8f0', marginTop: '10px' }}>
+                        <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                            Showing <strong>{(pagination.page - 1) * pagination.limit + 1}</strong> to <strong>{Math.min(pagination.page * pagination.limit, pagination.total)}</strong> of <strong>{pagination.total}</strong> results
+                        </div>
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Rows:</span>
+                                <select 
+                                    value={pagination.limit} 
+                                    onChange={(e) => setPagination(p => ({ ...p, limit: Number(e.target.value), page: 1 }))}
+                                    className="form-input"
+                                    style={{ width: 'auto', padding: '2px 8px', height: '30px', fontSize: '0.85rem' }}
+                                >
+                                    <option value={10}>10</option>
+                                    <option value={25}>25</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+                            </div>
+                            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                            <button 
+                                onClick={() => setPagination(p => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                                disabled={pagination.page === 1}
+                                className="btn-secondary" style={{ padding: '6px 10px' }}
+                            ><ChevronLeft size={16} /></button>
+                            <span style={{ fontSize: '0.9rem', color: '#1e293b', padding: '0 10px' }}>Page {pagination.page} of {pagination.totalPages}</span>
+                            <button 
+                                onClick={() => setPagination(p => ({ ...p, page: Math.min(p.totalPages, p.page + 1) }))}
+                                disabled={pagination.page === pagination.totalPages}
+                                className="btn-secondary" style={{ padding: '6px 10px' }}
+                            ><ChevronRight size={16} /></button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </>
         )}
 
         {/* CASE 3: FORM */}
@@ -333,7 +449,7 @@ const Leads = () => {
             <LeadForm 
                 form={leadForm}
                 isEditing={!!(leadDetail && leadDetail.id)}
-                onBack={() => id ? setViewMode('detail') : setViewMode('kanban')}
+                onBack={() => id ? setViewMode('detail') : setViewMode(preferredView)}
                 onSave={handleSave}
                 onChange={handleChange}
                 onArrayChange={handleArrayChange}

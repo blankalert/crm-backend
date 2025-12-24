@@ -7,14 +7,58 @@ const router = express.Router();
 router.get('/', authenticateToken, checkPerm('lead:read'), async (req, res) => {
   try {
     const tenant_id = req.user.tenant_id;
-    const result = await pool.query(`
+    const { page = 1, limit = 20, search = '', pipeline, status, sort_by = 'created_at', sort_order = 'DESC' } = req.query;
+
+    const offset = (page - 1) * limit;
+    const params = [tenant_id];
+    let paramIndex = 2;
+    
+    let whereClause = `WHERE l.tenant_id = $1 AND l.is_delete = FALSE`;
+
+    if (search) {
+        whereClause += ` AND (l.title ILIKE $${paramIndex} OR l.company_name ILIKE $${paramIndex} OR l.company_email ILIKE $${paramIndex})`;
+        params.push(`%${search}%`);
+        paramIndex++;
+    }
+
+    if (pipeline) {
+        whereClause += ` AND l.pipeline = $${paramIndex}`;
+        params.push(pipeline);
+        paramIndex++;
+    }
+
+    if (status) {
+        whereClause += ` AND l.status = $${paramIndex}`;
+        params.push(status);
+        paramIndex++;
+    }
+
+    // 1. Get Total Count for Pagination
+    const countRes = await pool.query(`SELECT COUNT(*) FROM leads l ${whereClause}`, params);
+    const total = parseInt(countRes.rows[0].count);
+
+    // 2. Get Paginated Data
+    const query = `
       SELECT l.*, u.first_name as agent_name, u.image as agent_image
       FROM leads l
       LEFT JOIN users u ON l.owner = u.id
-      WHERE l.tenant_id = $1 AND l.is_delete = FALSE
-      ORDER BY l.created_at DESC
-    `, [tenant_id]);
-    res.json(result.rows);
+      ${whereClause}
+      ORDER BY l.${sort_by} ${sort_order}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+    
+    const dataParams = [...params, limit, offset];
+    const result = await pool.query(query, dataParams);
+
+    res.json({
+        data: result.rows,
+        pagination: {
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / limit)
+        }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).send("Error fetching leads");

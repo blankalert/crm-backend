@@ -32,11 +32,11 @@ const LeadForm = ({
 
   const initializeStages = (pipeList) => {
       if (form.pipeline) {
-          const current = pipeList.find(p => p.pipeline_name === form.pipeline);
+          const current = pipeList.find(p => p.id === form.pipeline);
           if (current) setActiveStages(current.stages.map(s => s.name));
       } else if (pipeList.length > 0 && !form.pipeline) {
           // Default new lead to first pipeline
-          onChange('pipeline', pipeList[0].pipeline_name);
+          onChange('pipeline', pipeList[0].id);
           setActiveStages(pipeList[0].stages.map(s => s.name));
           onChange('status', pipeList[0].stages[0].name);
       }
@@ -44,10 +44,10 @@ const LeadForm = ({
 
   // Update stages when pipeline changes
   const handlePipelineChange = (e) => {
-      const newPipelineName = e.target.value;
-      onChange('pipeline', newPipelineName);
+      const newPipelineId = e.target.value;
+      onChange('pipeline', newPipelineId);
       
-      const selected = pipelines.find(p => p.pipeline_name === newPipelineName);
+      const selected = pipelines.find(p => p.id === newPipelineId);
       if (selected) {
           const newStages = selected.stages.map(s => s.name);
           setActiveStages(newStages);
@@ -91,7 +91,7 @@ const LeadForm = ({
                 <div className="form-group">
                     <label>Pipeline</label>
                     <select className="form-input" value={form.pipeline || ''} onChange={handlePipelineChange}>
-                        {pipelines.map(p => <option key={p.id} value={p.pipeline_name}>{p.pipeline_name}</option>)}
+                        {pipelines.map(p => <option key={p.id} value={p.id}>{p.pipeline_name}</option>)}
                     </select>
                 </div>
 
