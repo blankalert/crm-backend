@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { 
-  Plus, LayoutList, LayoutGrid, Filter, ChevronLeft, ChevronRight, Search 
+  Plus, LayoutList, LayoutGrid, Filter, ChevronLeft, ChevronRight, Search, Settings
 } from 'lucide-react'
 import '../../App.css'
 import AdvancedTable from '../AdvancedTable'
@@ -32,7 +32,7 @@ const LEAD_COLUMNS = [
 ];
 
 const Leads = () => {
-  const { token } = useOutletContext();
+  const { token, user } = useOutletContext();
   const { id } = useParams(); 
   const navigate = useNavigate();
 
@@ -43,6 +43,7 @@ const Leads = () => {
   // PAGINATION & FILTER STATE
   const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 })
   const [searchTerm, setSearchTerm] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' })
   
   // VIEW STATE
@@ -65,7 +66,8 @@ const Leads = () => {
       city: '', state: '', 
       phones: [{ number: '', type: 'Mobile' }], 
       emails: [{ email: '', type: 'Work' }],
-      address: { line: '', city: '', state: '', zipcode: '' }
+      address: { line: '', city: '', state: '', zipcode: '' },
+      custom_data: {}
   })
   
   // Shared State
@@ -87,6 +89,15 @@ const Leads = () => {
         fetchPipelines()
     }
   }, [token])
+
+  // Debounce Search Input
+  useEffect(() => {
+      const timer = setTimeout(() => {
+          setSearchTerm(searchInput);
+          setPagination(prev => ({ ...prev, page: 1 }));
+      }, 500);
+      return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Fetch leads whenever pagination, search, or view context changes
   useEffect(() => {
@@ -164,7 +175,8 @@ const Leads = () => {
               req_amount: fullLead.req_amount || '', lead_type: fullLead.lead_type || 'Warm', priority: fullLead.priority || 'Medium',
               company_name: fullLead.company_name || '', city: fullLead.city || '', state: fullLead.state || '',
               phones: fullLead.phones || [], emails: fullLead.emails || [],
-              address: fullLead.address || { line: '', city: '', state: '', zipcode: '' }
+              address: fullLead.address || { line: '', city: '', state: '', zipcode: '' },
+              custom_data: fullLead.custom_data || {}
           });
           setLeadDetail(fullLead); setSelectedLeadId(fullLead.id); setViewMode('edit');
       } catch(e) { console.error(e); }
@@ -180,7 +192,8 @@ const Leads = () => {
           lead_message: '', remark: '', source: '', owner: '', 
           status: firstStage, pipeline: currentPipe?.id || '', 
           req_amount: '', lead_type: 'Warm', priority: 'Medium', company_name: '', city: '', state: '', 
-          phones: [], emails: [], address: { line: '', city: '', state: '', zipcode: '' }
+          phones: [], emails: [], address: { line: '', city: '', state: '', zipcode: '' },
+          custom_data: {}
       });
       setViewMode('edit');
       setSelectedLeadId(null);
@@ -188,11 +201,17 @@ const Leads = () => {
 
   const handleSave = async (e) => {
       e.preventDefault();
+      
+      // Prepare payload: remove read-only fields and sanitize numbers
+      const payload = { ...leadForm };
+      if (payload.req_amount === '') payload.req_amount = null;
+      delete payload.leadRID;
+
       try {
           if (viewMode === 'edit' && selectedLeadId) {
-             await axios.put(`http://localhost:3000/api/leads/${selectedLeadId}`, leadForm, { headers: { Authorization: `Bearer ${token}` } });
+             await axios.put(`http://localhost:3000/api/leads/${selectedLeadId}`, payload, { headers: { Authorization: `Bearer ${token}` } });
           } else {
-             await axios.post('http://localhost:3000/api/leads', leadForm, { headers: { Authorization: `Bearer ${token}` } });
+             await axios.post('http://localhost:3000/api/leads', payload, { headers: { Authorization: `Bearer ${token}` } });
           }
           fetchLeads();
           if(id) fetchLeadDetails(id); else setViewMode('kanban'); 
@@ -204,7 +223,8 @@ const Leads = () => {
       
       const payload = {
           status: closeStatus,
-          close_reason: closeReason,
+          closed_reason: closeReason,
+          closed_time: new Date().toISOString()
       };
 
       try {
@@ -300,6 +320,16 @@ const Leads = () => {
   // --- HEADER ACTIONS ---
   const headerActions = (
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {/* CUSTOMIZE LAYOUT BUTTON */}
+          <button 
+              onClick={() => navigate('/dashboard/settings/form-layouts')}
+              className="btn-secondary"
+              style={{ height: '34px', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="Customize Form Layout"
+          >
+              <Settings size={16} />
+          </button>
+
           {/* PIPELINE SELECTOR */}
           <select 
              className="btn-secondary" 
@@ -324,6 +354,15 @@ const Leads = () => {
   const addItem = (field, item) => setLeadForm(p => ({...p, [field]: [...p[field], item]}));
   const removeItem = (field, idx) => setLeadForm(p => ({...p, [field]: p[field].filter((_,i)=>i!==idx)}));
   const handleAddress = (k, v) => setLeadForm(p => ({...p, address: {...p.address, [k]: v}}));
+  const handleCustomDataChange = (key, value) => {
+      setLeadForm(prev => ({
+          ...prev,
+          custom_data: {
+              ...prev.custom_data,
+              [key]: value
+          }
+      }));
+  }
   const initiateCloseLead = (status) => { setCloseStatus(status); setCloseReason(''); setShowClosePopup(true); }
 
   // Helper to determine if nav buttons should be enabled
@@ -343,6 +382,7 @@ const Leads = () => {
                 activeTab={activeDetailTab}
                 setActiveTab={setActiveDetailTab}
                 users={users}
+                currentUser={user}
                 token={token}
                 
                 // Pass Active Pipeline Stages for Progress Bar
@@ -398,8 +438,8 @@ const Leads = () => {
                     disablePagination={true}
                     
                     // Server-Side Props
-                    onSearch={(val) => { setSearchTerm(val); setPagination(p => ({...p, page: 1})); }}
-                    searchValue={searchTerm}
+                    onSearch={(val) => setSearchInput(val)}
+                    searchValue={searchInput}
                     onSort={handleSort}
                     currentSort={sortConfig}
                 />
@@ -457,6 +497,7 @@ const Leads = () => {
                 onRemoveItem={removeItem}
                 onAddressChange={handleAddress}
                 users={users}
+                onCustomDataChange={handleCustomDataChange}
                 pipelinesProp={pipelines} // PASS PIPELINES PROP HERE
             />
         )}

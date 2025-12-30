@@ -94,7 +94,7 @@ router.post('/', authenticateToken, checkPerm('lead:create'), async (req, res) =
       name, lead_date, category, lead_message, remark, source, status, pipeline,
       req_amount, lead_type, priority, company_name, owner,
       city, state, company_email, company_phone,
-      phones, emails, address
+      phones, emails, address, custom_data
   } = req.body;
 
   const tenant_id = req.user.tenant_id;
@@ -109,13 +109,13 @@ router.post('/', authenticateToken, checkPerm('lead:create'), async (req, res) =
       INSERT INTO leads 
       (tenant_id, title, lead_date, category, lead_message, remark, source, status, pipeline,
        req_amount, lead_type, priority, company_name, owner, created_by,
-       city, state, company_email, company_phone)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+       city, state, company_email, company_phone, custom_data)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING id
     `, [
         tenant_id, name, lead_date, category, lead_message, remark, source, status, pipeline || 'Standard',
         req_amount || 0, lead_type, priority, company_name, assignedOwner, created_by,
-        city, state, company_email, company_phone
+        city, state, company_email, company_phone, custom_data || {}
     ]);
     const leadId = leadRes.rows[0].id;
 
@@ -149,7 +149,7 @@ router.put('/:id', authenticateToken, checkPerm('lead:update'), async (req, res)
       req_amount, lead_type, priority, company_name, owner,
       city, state, company_email, company_phone,
       phones, emails, address,
-      closed_reason, closed_time
+      closed_reason, closed_time, custom_data
   } = req.body;
 
   const client = await pool.connect();
@@ -184,6 +184,7 @@ router.put('/:id', authenticateToken, checkPerm('lead:update'), async (req, res)
     if (state !== undefined) addField('state', state);
     if (company_email !== undefined) addField('company_email', company_email);
     if (company_phone !== undefined) addField('company_phone', company_phone);
+    if (custom_data !== undefined) addField('custom_data', custom_data);
     if (closed_reason !== undefined) addField('closed_reason', closed_reason);
     if (closed_time !== undefined) addField('closed_time', closed_time);
     

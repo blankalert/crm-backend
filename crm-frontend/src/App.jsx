@@ -12,10 +12,15 @@ import UserControl from './components/UserControl'
 import RoleSettings from './components/settings/customization/RoleSettings'
 import CompanyProfile from './components/settings/customization/CompanyProfile'
 import PipelineSettings from './components/settings/customization/PipelineSettings'
+import FormFieldSettings from './components/settings/customization/FormFieldSettings'
+import FormLayoutEditor from './components/settings/customization/FormLayoutEditor';
+import LayoutManager from './components/settings/customization/LayoutManager';
 
 import Leads from './components/leads/Leads'
 import Tasks from './components/tasks/Tasks'
 
+
+// Inside your <Routes> configuration (likely nested under /dashboard)
 
 // --- GLOBAL AUTH INTERCEPTOR ---
 const AuthHandler = () => {
@@ -125,6 +130,12 @@ function App() {
             <Route path="settings/customization/roles" element={<RoleSettingsWrapper />} />
             <Route path="settings/customization/company" element={<CompanyProfileWrapper />} />
             <Route path="settings/customization/pipeline" element={<PipelineWrapper />} />
+            <Route path="settings/customization/FormFieldSettings" element={<FormFieldSettings />} />
+            
+            {/* Layout Manager Routes */}
+            <Route path="settings/form-layouts" element={<LayoutManager />} />
+            <Route path="settings/form-layouts/new" element={<FormLayoutEditor />} />
+            <Route path="settings/form-layouts/edit/:id" element={<FormLayoutEditor />} />
             
             {/* Legacy redirects to ensure old links work */}
             <Route path="settings/roles" element={<Navigate to="customization/roles" replace />} />

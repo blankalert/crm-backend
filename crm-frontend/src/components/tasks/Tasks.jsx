@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Circle, Clock, User, Calendar, Search, Filter, Plus, CheckSquare, ListFilter, ExternalLink, CheckCircle, XCircle, X } from 'lucide-react';
+import { Circle, Clock, User, Calendar, Search, Filter, Plus, CheckSquare, ListFilter, ExternalLink, CheckCircle, XCircle, X, Phone, Mail, MessageSquare, Edit, Trash2, Loader } from 'lucide-react';
 import TaskForm from './TaskForm';
 
 const Tasks = () => {
-    const { token } = useOutletContext();
+    const { token, user } = useOutletContext();
     const navigate = useNavigate();
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
@@ -28,7 +28,7 @@ const Tasks = () => {
     const initialForm = {
         task_name: '', task_type: 'Follow-Up', description: '', status: 'Open', priority: 'Medium',
         due_date: '', owner_id: '', related_to_module: '', related_to_id: '',
-        response_type: '', response_text: '', remark: ''
+        related_rid: '', response_type: '', response_text: '', remark: ''
     };
     const [currentForm, setCurrentForm] = useState(initialForm);
 
@@ -36,6 +36,13 @@ const Tasks = () => {
     const [showCompletePopup, setShowCompletePopup] = useState(false);
     const [completingTask, setCompletingTask] = useState(null);
     const [completionData, setCompletionData] = useState({ response_type: '', response_text: '', remark: '' });
+
+    // Quick View State
+    const [showQuickView, setShowQuickView] = useState(false);
+    const [viewingTask, setViewingTask] = useState(null);
+    const [relatedLead, setRelatedLead] = useState(null);
+    const [leadHistory, setLeadHistory] = useState([]);
+    const [loadingQuickView, setLoadingQuickView] = useState(false);
 
     const RESPONSE_OPTIONS = {
         Positive: ['Interested', 'Quote Requested', 'Meeting Scheduled', 'Ready to Buy'],
@@ -94,6 +101,7 @@ const Tasks = () => {
     const handleEdit = (task) => {
         setCurrentForm({
             ...task,
+            related_rid: task.related_rid || task.leadRID || task.leadrid || '',
             due_date: task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : ''
         });
         setIsEditing(true);
@@ -105,11 +113,23 @@ const Tasks = () => {
     };
 
     const handleSave = async () => {
+        const now = new Date().toISOString();
+        const payload = {
+            ...currentForm,
+            updated_at: now,
+            updated_by: user?.id
+        };
+
+        if (!isEditing) {
+            payload.created_at = now;
+            payload.created_by = user?.id;
+        }
+
         try {
             if (isEditing) {
-                await axios.put(`http://localhost:3000/api/tasks/${currentForm.id}`, currentForm, { headers: { Authorization: `Bearer ${token}` } });
+                await axios.put(`http://localhost:3000/api/tasks/${currentForm.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
             } else {
-                await axios.post('http://localhost:3000/api/tasks', currentForm, { headers: { Authorization: `Bearer ${token}` } });
+                await axios.post('http://localhost:3000/api/tasks', payload, { headers: { Authorization: `Bearer ${token}` } });
             }
             fetchTasks();
             setViewMode('kanban');
@@ -133,11 +153,41 @@ const Tasks = () => {
         }
     };
 
+    const handleTaskClick = async (task) => {
+        setViewingTask(task);
+        setShowQuickView(true);
+        setRelatedLead(null);
+        setLeadHistory([]);
+        
+        if (task.related_to_module === 'Lead' && task.related_to_id) {
+            setLoadingQuickView(true);
+            try {
+                const [leadRes, historyRes] = await Promise.all([
+                    axios.get(`http://localhost:3000/api/leads/${task.related_to_id}`, { headers: { Authorization: `Bearer ${token}` } }),
+                    axios.get(`http://localhost:3000/api/tasks?related_to_module=Lead&related_to_id=${task.related_to_id}`, { headers: { Authorization: `Bearer ${token}` } })
+                ]);
+                
+                setRelatedLead(leadRes.data);
+                
+                const history = historyRes.data
+                    .filter(t => t.status === 'Completed' && t.id !== task.id)
+                    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+                    .slice(0, 5);
+                setLeadHistory(history);
+            } catch (e) {
+                console.error("Failed to fetch details", e);
+            } finally {
+                setLoadingQuickView(false);
+            }
+        }
+    };
+
     const handleCancelTask = async (task) => {
         if (window.confirm("Are you sure you want to CANCEL this task?")) {
             try {
                 await axios.put(`http://localhost:3000/api/tasks/${task.id}`, { ...task, status: 'Cancelled' }, { headers: { Authorization: `Bearer ${token}` } });
                 fetchTasks();
+                setShowQuickView(false);
             } catch (e) { alert("Failed to cancel task"); }
         }
     };
@@ -152,7 +202,7 @@ const Tasks = () => {
         if (!completionData.response_type) return alert("Please select a response type");
         try {
             await axios.put(`http://localhost:3000/api/tasks/${completingTask.id}`, { ...completingTask, status: 'Completed', response_type: completionData.response_type, response_text: completionData.response_text, remark: completionData.remark, updated_at: new Date().toISOString() }, { headers: { Authorization: `Bearer ${token}` } });
-            setShowCompletePopup(false); setCompletingTask(null); fetchTasks();
+            setShowCompletePopup(false); setCompletingTask(null); fetchTasks(); setShowQuickView(false);
         } catch (e) { alert("Failed to complete task"); }
     };
 
@@ -226,16 +276,18 @@ const Tasks = () => {
     };
 
     const renderTaskCard = (task) => (
-        <div key={task.id} onClick={() => handleEdit(task)} style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div key={task.id} onClick={() => handleTaskClick(task)} style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {/* Header: Task Name (Type) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '1rem', lineHeight: '1.4' }}>
                     {task.task_name} 
                     <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 'normal', marginLeft: '6px' }}>({task.task_type})</span>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); toggleStatus(task); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: '2px' }} title={task.status === 'Completed' ? "Mark Incomplete" : "Mark Complete"}>
-                    {task.status === 'Completed' ? <CheckSquare size={20} color="#22c55e" /> : <Circle size={20} color="#94a3b8" />}
-                </button>
+                <span style={{ 
+                    fontSize: '0.75rem', fontWeight: '600', padding: '2px 8px', borderRadius: '4px',
+                    background: task.priority === 'High' ? '#fee2e2' : (task.priority === 'Low' ? '#dbeafe' : '#ffedd5'),
+                    color: task.priority === 'High' ? '#991b1b' : (task.priority === 'Low' ? '#1e40af' : '#9a3412')
+                }}>{task.priority}</span>
             </div>
 
             {/* Body: Module, Description */}
@@ -256,7 +308,7 @@ const Tasks = () => {
             <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>
                 {task.status !== 'Completed' ? (
                     <>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> {task.due_date ? new Date(task.due_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'No Time'}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#1e293b', fontWeight: '700' }}><Clock size={14} /> {task.due_date ? new Date(task.due_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'No Time'}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><User size={14} /> {task.owner_name || 'Unassigned'}</span>
                     </>
                 ) : (
@@ -447,9 +499,90 @@ const Tasks = () => {
                 </div>
             )}
 
+            {/* QUICK VIEW POPUP */}
+            {showQuickView && viewingTask && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className="card" style={{ width: '900px', maxHeight: '90vh', overflowY: 'auto', background: 'white', padding: '24px', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0 }}>Task Details</h3>
+                            <button onClick={() => setShowQuickView(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+                            {/* LEFT: Task Info */}
+                            <div>
+                                <h4 style={{ margin: '0 0 15px 0', color: '#1e293b', fontSize: '1.2rem' }}>{viewingTask.task_name}</h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', fontSize: '0.9rem', color: '#475569', marginBottom: '20px' }}>
+                                    <div><strong>Type:</strong> {viewingTask.task_type}</div>
+                                    <div><strong>Status:</strong> <span style={{ color: viewingTask.status === 'Completed' ? '#16a34a' : '#475569' }}>{viewingTask.status}</span></div>
+                                    <div><strong>Priority:</strong> {viewingTask.priority}</div>
+                                    <div><strong>Due:</strong> {viewingTask.due_date ? new Date(viewingTask.due_date).toLocaleString() : '-'}</div>
+                                    <div><strong>Owner:</strong> {viewingTask.owner_name || 'Unassigned'}</div>
+                                </div>
+                                {viewingTask.description && (
+                                    <div style={{ marginBottom: '20px', background: '#f8fafc', padding: '15px', borderRadius: '6px', fontSize: '0.9rem', color: '#334155' }}>
+                                        <strong>Description:</strong><br/>
+                                        {viewingTask.description}
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                                    {viewingTask.status !== 'Completed' && viewingTask.status !== 'Cancelled' && (
+                                        <>
+                                            <button onClick={() => initiateCompleteTask(viewingTask)} className="btn-primary" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '5px' }}><CheckCircle size={16} /> Complete</button>
+                                            <button onClick={() => handleCancelTask(viewingTask)} className="btn-secondary" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: '5px' }}><XCircle size={16} /> Cancel</button>
+                                        </>
+                                    )}
+                                    <button onClick={() => { setShowQuickView(false); handleEdit(viewingTask); }} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Edit size={16} /> Edit</button>
+                                </div>
+                            </div>
+
+                            {/* RIGHT: Lead Info & History */}
+                            <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '30px' }}>
+                                {loadingQuickView ? (
+                                    <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Loader className="animate-spin" /></div>
+                                ) : relatedLead ? (
+                                    <>
+                                        <h4 style={{ margin: '0 0 15px 0', color: '#64748b', fontSize: '0.9rem', textTransform: 'uppercase' }}>Lead Details</h4>
+                                        <div style={{ marginBottom: '20px' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1e293b' }}>{relatedLead.title}</div>
+                                            <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{relatedLead.company_name}</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '10px', fontSize: '0.9rem' }}>
+                                                {relatedLead.company_phone && <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Phone size={14} /> {relatedLead.company_phone}</div>}
+                                                {relatedLead.company_email && <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Mail size={14} /> {relatedLead.company_email}</div>}
+                                            </div>
+                                            {relatedLead.lead_message && (
+                                                <div style={{ marginTop: '10px', fontSize: '0.9rem', color: '#475569', fontStyle: 'italic' }}>
+                                                    <MessageSquare size={14} style={{ marginRight: '5px', verticalAlign: 'middle' }} />
+                                                    "{relatedLead.lead_message}"
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <h4 style={{ margin: '20px 0 10px 0', color: '#64748b', fontSize: '0.9rem', textTransform: 'uppercase' }}>Recent Activity</h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {leadHistory.length > 0 ? leadHistory.map(h => (
+                                                <div key={h.id} style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px', fontSize: '0.85rem' }}>
+                                                    <div style={{ fontWeight: '600', color: '#334155' }}>{h.task_name}</div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', color: '#64748b' }}>
+                                                        <span style={{ color: h.response_type === 'Positive' ? '#16a34a' : (h.response_type === 'Negative' ? '#dc2626' : '#ca8a04') }}>{h.response_type} - {h.response_text}</span>
+                                                        <span>{new Date(h.updated_at).toLocaleDateString()}</span>
+                                                    </div>
+                                                </div>
+                                            )) : <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No recent history</div>}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '20px' }}>No related lead details available.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* COMPLETION POPUP */}
             {showCompletePopup && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
                     <div className="card" style={{ width: '400px', padding: '24px', background: 'white', borderRadius: '8px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <h3 style={{ margin: 0 }}>Complete Task</h3>

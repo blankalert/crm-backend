@@ -46,14 +46,14 @@ router.get('/', authenticateToken, async (req, res) => {
 // CREATE A NEW TASK
 router.post('/', authenticateToken, async (req, res) => {
     try {
-        const { task_name, task_type, description, status, priority, due_date, reminder_date, owner_id, related_to_module, related_to_id } = req.body;
+        const { task_name, task_type, description, status, priority, due_date, reminder_date, owner_id, related_to_module, related_to_id ,related_rid, custom_data} = req.body;
         const { tenant_id, user_id } = req.user;
 
         const result = await pool.query(
-            `INSERT INTO tasks (tenant_id, task_name, task_type, description, status, priority, due_date, reminder_date, owner_id, related_to_module, related_to_id, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            `INSERT INTO tasks (tenant_id, task_name, task_type, description, status, priority, due_date, reminder_date, owner_id, related_to_module, related_to_id, created_by,related_rid, custom_data)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING *`,
-            [tenant_id, task_name, task_type, description, status || 'Open', priority, due_date, reminder_date, owner_id, related_to_module, related_to_id, user_id]
+            [tenant_id, task_name, task_type, description, status || 'Open', priority, due_date, reminder_date, owner_id, related_to_module, related_to_id, user_id, related_rid, custom_data || {}]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -66,7 +66,7 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const { task_name, task_type, description, status, priority, due_date, reminder_date, owner_id } = req.body;
+        const { task_name, task_type, description, status, priority, due_date, reminder_date, owner_id,related_to_id,related_rid,related_to_module,response_text,response_type,remark, custom_data } = req.body;
         const { tenant_id, user_id } = req.user;
 
         // Handle setting completed_at timestamp
@@ -82,10 +82,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
             `UPDATE tasks SET 
                 task_name = $1, task_type = $2, description = $3, status = $4, priority = $5, 
                 due_date = $6, reminder_date = $7, owner_id = $8, updated_at = NOW(), updated_by = $9,
-                completed_at = COALESCE($10, completed_at)
+                completed_at = COALESCE($10, completed_at), related_to_id = $13, related_to_module = $14, response_text = $15, response_type = $16, remark = $17 , related_rid = $18, custom_data = COALESCE($19, custom_data)
+             
              WHERE id = $11 AND tenant_id = $12
              RETURNING *`,
-            [task_name, task_type, description, status, priority, due_date, reminder_date, owner_id, user_id, completed_at, id, tenant_id]
+            [task_name, task_type, description, status, priority, due_date, reminder_date, owner_id, user_id, completed_at, id, tenant_id, related_to_id,related_to_module,response_text,response_type,remark,related_rid, custom_data || null ]
         );
 
         if (result.rows.length === 0) {

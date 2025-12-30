@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { ArrowLeft, Edit, Phone, Mail, FileText, MessageSquare, ClipboardList, CheckCircle, ChevronDown, ThumbsUp, XCircle, ThumbsDown, Clock, User, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import axios from 'axios'
+import { ArrowLeft, Edit, Phone, Mail, FileText, MessageSquare, ClipboardList, CheckCircle, ChevronDown, ThumbsUp, XCircle, ThumbsDown, Clock, User, X, ChevronLeft, ChevronRight, Loader } from 'lucide-react'
 import TaskSection from './TaskSection'
 
 const DetailRow = ({ label, value, isTag, tagColor }) => (
@@ -16,7 +17,7 @@ const DetailRow = ({ label, value, isTag, tagColor }) => (
 )
 
 const LeadDetails = ({
-    lead, onBack, onEdit, activeTab, setActiveTab, pipelines, users, token,
+    lead, onBack, onEdit, activeTab, setActiveTab, pipelines, users, token, currentUser,
     pipelineStages, 
     
     // Updated Props
@@ -24,7 +25,8 @@ const LeadDetails = ({
     
     onCloseLead, showClosePopup, closeStatus, closeReason, setCloseReason,
     onConfirmClose, onCancelClose, getStatusColor, isClosed, currentStageIndex,
-    onNavigateLead, hasPrev, hasNext // Navigation Props
+    onNavigateLead, hasPrev, hasNext, // Navigation Props
+    hasMore, onLoadMore, isLoadingMore // Pagination Props
 }) => {
 
   const formatDate = (dateString) => {
@@ -36,6 +38,21 @@ const LeadDetails = ({
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [detailTab, setDetailTab] = useState('general');
+  const [customFields, setCustomFields] = useState([]);
+
+  useEffect(() => {
+    const fetchCustomFields = async () => {
+        if (!token) return;
+        try {
+            const res = await axios.get('http://localhost:3000/api/form-fields/fields/leads', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomFields(res.data);
+        } catch (err) { console.error("Failed to load custom fields"); }
+    }
+    fetchCustomFields();
+  }, [token]);
+
   const handleCloseOptionClick = (status) => { setIsDropdownOpen(false); onCloseLead(status); };
 
   const currentPipeline = pipelines.find(p => p.id === lead.pipeline);
@@ -67,7 +84,17 @@ const LeadDetails = ({
                 {/* Navigation Arrows */}
                 <div style={{ display: 'flex', gap: '2px', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
                     <button onClick={() => onNavigateLead('prev')} disabled={!hasPrev} style={{ background: 'white', border: 'none', padding: '6px 8px', cursor: hasPrev ? 'pointer' : 'not-allowed', color: hasPrev ? '#334155' : '#cbd5e1', borderRight: '1px solid #f1f5f9' }} title="Previous Lead"><ChevronLeft size={18} /></button>
-                    <button onClick={() => onNavigateLead('next')} disabled={!hasNext} style={{ background: 'white', border: 'none', padding: '6px 8px', cursor: hasNext ? 'pointer' : 'not-allowed', color: hasNext ? '#334155' : '#cbd5e1' }} title="Next Lead"><ChevronRight size={18} /></button>
+                    <button 
+                        onClick={() => {
+                            if (hasNext) onNavigateLead('next');
+                            else if (hasMore && onLoadMore) onLoadMore();
+                        }} 
+                        disabled={(!hasNext && !hasMore) || isLoadingMore} 
+                        style={{ background: 'white', border: 'none', padding: '6px 8px', cursor: (hasNext || hasMore) && !isLoadingMore ? 'pointer' : 'not-allowed', color: (hasNext || hasMore) && !isLoadingMore ? '#334155' : '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '34px' }} 
+                        title={hasNext ? "Next Lead" : (hasMore ? "Load More Leads" : "No More Leads")}
+                    >
+                        {isLoadingMore ? <Loader size={18} className="animate-spin" /> : <ChevronRight size={18} />}
+                    </button>
                 </div>
 
                 <div>
@@ -216,6 +243,12 @@ const LeadDetails = ({
                                 <div style={{ gridColumn: '1 / -1' }}>
                                     <DetailRow label="Description" value={lead.lead_message} />
                                 </div>
+                                {customFields.map(field => {
+                                    if (field.is_hidden) return null;
+                                    const val = lead.custom_data?.[field.field_key];
+                                    if (!val) return null;
+                                    return <DetailRow key={field.id} label={field.field_label} value={val} />;
+                                })}
                             </div>
                         )}
                         {detailTab === 'contact' && (
@@ -276,7 +309,9 @@ const LeadDetails = ({
                     token={token}
                     relatedToModule="Lead"
                     relatedToId={lead.id}
+                    relatedToRID={lead.leadRID || lead.leadrid}
                     users={users}
+                    currentUser={currentUser}
                 />
             </div>
         </div>

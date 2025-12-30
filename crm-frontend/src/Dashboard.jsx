@@ -6,6 +6,13 @@ import './App.css'
 
 import Sidebar from './components/Sidebar'
 
+
+
+
+
+
+
+
 function Dashboard() {
   const [isSidebarOpen, setSidebarOpen] = useState(true)
   const [currentUser, setCurrentUser] = useState({ name: 'Loading...', role: '...', firstName: 'User' })
@@ -69,6 +76,8 @@ function Dashboard() {
           subItems: [
             { name: 'Role Control', path: '/dashboard/settings/customization/roles' },
             { name: 'Pipeline Control', path: '/dashboard/settings/customization/pipeline' },
+            { name: 'Form Field', path: '/dashboard/settings/customization/FormFieldSettings' },
+            { name: 'Form Layout', path: '/dashboard/settings/form-layouts' },
             // Add other customization items here if needed
           ]
         },

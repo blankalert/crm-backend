@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Search, Loader } from 'lucide-react';
 import axios from 'axios';
 
 const RESPONSE_OPTIONS = {
@@ -10,15 +10,32 @@ const RESPONSE_OPTIONS = {
 
 const TaskForm = ({ form, isEditing, onBack, onSave, onChange, users, token }) => {
     const [leads, setLeads] = useState([]);
+    const [leadSearch, setLeadSearch] = useState('');
+    const [shouldLoad, setShouldLoad] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     
     // Fetch leads for the "Related To" dropdown if module is Lead
     useEffect(() => {
-        if (form.related_to_module === 'Lead') {
-            axios.get('http://localhost:3000/api/leads', { headers: { Authorization: `Bearer ${token}` } })
-                .then(res => setLeads(res.data))
-                .catch(e => console.error("Failed to fetch leads", e));
+        if (form.related_to_module === 'Lead' && shouldLoad) {
+            if (leadSearch.length > 0 && leadSearch.length < 3) {
+                setLeads([]);
+                setIsLoading(false);
+                return;
+            }
+
+            setIsLoading(true);
+            const delay = leadSearch.length >= 3 ? 1500 : 500;
+
+            const timer = setTimeout(() => {
+                const params = leadSearch ? { search: leadSearch } : {};
+                axios.get('http://localhost:3000/api/leads', { headers: { Authorization: `Bearer ${token}` }, params })
+                    .then(res => setLeads(res.data.data || (Array.isArray(res.data) ? res.data : [])))
+                    .catch(e => console.error("Failed to fetch leads", e))
+                    .finally(() => setIsLoading(false));
+            }, delay);
+            return () => clearTimeout(timer);
         }
-    }, [form.related_to_module, token]);
+    }, [form.related_to_module, token, leadSearch, shouldLoad]);
 
     const handleResponseTypeChange = (e) => {
         const type = e.target.value;
@@ -95,10 +112,41 @@ const TaskForm = ({ form, isEditing, onBack, onSave, onChange, users, token }) =
                     <div className="form-group">
                         <label>Record</label>
                         {form.related_to_module === 'Lead' ? (
-                            <select className="form-input" value={form.related_to_id || ''} onChange={e => onChange('related_to_id', e.target.value)}>
-                                <option value="">Select Lead...</option>
-                                {leads.map(l => <option key={l.id} value={l.id}>{l.title} ({l.company_name})</option>)}
-                            </select>
+                            <div>
+                                <div style={{position:'relative', marginBottom:'5px'}}>
+                                    <input 
+                                        className="form-input" 
+                                        placeholder="Search Lead..." 
+                                        value={leadSearch} 
+                                        onChange={e => { setLeadSearch(e.target.value); setShouldLoad(true); }} 
+                                        onFocus={() => setShouldLoad(true)}
+                                        style={{paddingLeft:'30px', width:'100%'}} 
+                                    />
+                                    {isLoading ? (
+                                        <Loader size={16} className="animate-spin" style={{position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', color:'#3b82f6'}}/>
+                                    ) : (
+                                        <Search size={16} style={{position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8'}}/>
+                                    )}
+                                </div>
+                                {leadSearch.length > 0 && leadSearch.length < 3 && <div style={{fontSize:'0.75rem', color:'#ef4444', marginBottom:'5px'}}>Type at least 3 characters</div>}
+                                <select className="form-input" value={form.related_to_id || ''} onChange={e => {
+                                    const val = e.target.value;
+                                    onChange('related_to_id', val);
+                                    const selected = leads.find(l => l.id == val);
+                                    if (selected) {
+                                        onChange('related_rid', selected.leadRID || selected.leadrid);
+                                    } else if (!val) {
+                                        onChange('related_rid', '');
+                                    }
+                                }} onFocus={() => setShouldLoad(true)}>
+                                    <option value="">Select Lead...</option>
+                                    {isLoading && <option disabled>Loading...</option>}
+                                    {form.related_to_id && !leads.find(l => l.id == form.related_to_id) && (
+                                        <option value={form.related_to_id}>#{form.related_rid || form.leadrid || form.leadRID || form.related_to_id} - (Selected)</option>
+                                    )}
+                                    {leads.map(l => <option key={l.id} value={l.id}>#{l.leadRID || l.leadrid || l.id} - {l.title} {l.company_name ? `(${l.company_name})` : ''}</option>)}
+                                </select>
+                            </div>
                         ) : (
                             <input 
                                 className="form-input" 
